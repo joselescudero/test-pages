@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>PGN Viewer</title>
 
 <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
@@ -11,30 +12,32 @@
 <script src="pgn-parser.js"></script>
 
 <style>
-  body {
-    font-family: monospace;
-    display: flex;
-    gap: 20px;
-    padding: 16px;
-    flex-wrap: wrap;
-  }
+  *, *::before, *::after { box-sizing: border-box; }
 
-  #leftPanel {
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f0f0f0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    align-items: stretch;
+    min-height: 100dvh;
   }
 
+  /* Board fills the full screen width */
   #boardContainer {
     position: relative;
-    width: 400px;
-    height: 400px;
+    width: 100vw;
+    height: 100vw;   /* square */
+    max-width: 600px;
+    max-height: 600px;
+    align-self: center;
     flex-shrink: 0;
   }
 
   #board { width: 100%; height: 100%; }
 
-  /* SVG overlay inside boardContainer so coordinates are board-relative */
   #arrowOverlay {
     position: absolute;
     top: 0; left: 0;
@@ -52,95 +55,105 @@
     border-style: solid;
   }
 
-  #controls { display: flex; gap: 6px; flex-wrap: wrap; }
-  #controls button { padding: 6px 10px; cursor: pointer; }
+  /* 4 icon buttons in a single row */
+  #controls {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    padding: 8px 8px 0;
+  }
+
+  #controls button {
+    font-size: 22px;
+    line-height: 1;
+    padding: 10px 0;
+    border: 1px solid #bbb;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #controls button:active { background: #dde; }
 
   #movesBox {
-    width: 400px;
-    min-height: 60px;
+    font-size: 14px;
+    line-height: 1.7;
+    background: #fff;
+    border-top: 1px solid #ddd;
+    border-bottom: 1px solid #ddd;
+    padding: 8px 10px;
+    word-break: break-word;
+  }
+
+  #gamesSection {
+    padding: 0 8px 16px;
+  }
+
+  #gamesSection h3 {
     font-size: 13px;
-    line-height: 1.6;
-    background: #f9f9f9;
-    border: 1px solid #ccc;
-    padding: 6px;
-    box-sizing: border-box;
+    color: #555;
+    margin: 12px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
-
-  #rightPanel {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-width: 340px;
-    max-width: 520px;
-  }
-
-  #rightPanel h3 { margin: 0; font-size: 14px; }
 
   #gameList {
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.7;
-    background: #f3f3f3;
-    border: 1px solid #ccc;
-    padding: 8px;
-    max-height: 580px;
-    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 6px 10px;
   }
 
-  .game-entry { margin-bottom: 6px; }
+  .game-entry { padding: 4px 0; border-bottom: 1px solid #eee; }
+  .game-entry:last-child { border-bottom: none; }
   .game-entry .game-label {
     font-weight: bold;
     cursor: pointer;
     color: #003080;
+    display: block;
+    padding: 2px 0;
   }
-  .game-entry .game-label:hover { text-decoration: underline; }
-  .game-entry .game-moves { color: #444; word-break: break-word; }
-
-  #validationBox {
-    font-size: 12px;
-    background: #fff8dc;
-    border: 1px solid #ccc;
-    padding: 6px;
-    max-height: 200px;
-    overflow-y: auto;
-  }
-
-  .valid-ok  { color: green; }
-  .valid-err { color: red; }
+  .game-entry .game-moves { color: #555; word-break: break-word; font-size: 12px; }
 </style>
 </head>
 <body>
 
-<div id="leftPanel">
-  <div id="boardContainer">
-    <div id="board"></div>
-    <!-- SVG lives inside boardContainer so line coordinates are relative to the board -->
-    <svg id="arrowOverlay">
-      <defs></defs>
-    </svg>
-  </div>
-
-  <div id="controls">
-    <button id="prevBtn">&#9664; Prev Move</button>
-    <button id="nextBtn">Next Move &#9654;</button>
-    <button id="prevGameBtn">&#9664;&#9664; Prev Game</button>
-    <button id="nextGameBtn">Next Game &#9654;&#9654;</button>
-  </div>
-
-  <div id="movesBox"></div>
+<div id="boardContainer">
+  <div id="board"></div>
+  <svg id="arrowOverlay"><defs></defs></svg>
 </div>
 
-<div id="rightPanel">
-  <h3>All games (main line + variants)</h3>
+<div id="controls">
+  <button id="prevGameBtn">&#9664;&#9664;</button>
+  <button id="prevBtn">&#9664;</button>
+  <button id="nextBtn">&#9654;</button>
+  <button id="nextGameBtn">&#9654;&#9654;</button>
+</div>
+
+<div id="movesBox"></div>
+
+<div id="gamesSection">
+  <h3>Games</h3>
   <div id="gameList"></div>
-  <h3>Validation</h3>
-  <div id="validationBox"></div>
 </div>
 
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
 // Test PGN: Ruy Lopez with many variants (several nested)
 // ─────────────────────────────────────────────────────────────────────────────
-const rawPGN = `
+const rawPGN=`
+1. e3 d5 { [%csl Ga6,Bb6,Rc6,Yd6,Gh6,Bg6,Rf6,Ye6][%cal Gb2b4,Bc2c4,Rd2d4,Ya2a4,Ge2f4,Bf2e4,Rg2g4,Yh2h4] }
+2. Nf3 Nc6
+3. Bc4 f6
+(3... g5 4. g3 f6 5. h3 h6 6. Rg1)
+4. g3 g6
+5. g4 g5 *
+`;
+const rawPGN2 = `
 1. e4 { [%csl Ge4] } e5
 2. Nf3 Nc6
   ( 2... f5
@@ -320,8 +333,6 @@ function updateMovesBox() {
       html += san + ' ';
     }
   }
-  const currentLabel = currentMove > 0 ? game.moves[currentMove - 1].san : 'START';
-  html += '<br><small>Current: <b>' + currentLabel + '</b></small>';
   document.getElementById('movesBox').innerHTML = html;
 }
 
@@ -356,24 +367,6 @@ function buildGameList() {
     currentMove = 0;
     gotoMove();
   });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Validation panel
-// ─────────────────────────────────────────────────────────────────────────────
-function buildValidation() {
-  const results  = validateGames(pgnData);
-  const container = document.getElementById('validationBox');
-  let html = '';
-  results.forEach(r => {
-    const label = r.index === 0 ? 'Main line' : 'Variant ' + r.index;
-    if (r.valid) {
-      html += '<div class="valid-ok">&#10004; Game ' + (r.index + 1) + ' (' + label + ') &mdash; ' + r.moves + ' half-moves</div>';
-    } else {
-      html += '<div class="valid-err">&#10008; Game ' + (r.index + 1) + ' (' + label + ') &mdash; ' + r.error + '</div>';
-    }
-  });
-  container.innerHTML = html;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -432,7 +425,6 @@ window.onload = function () {
   });
   initArrowMarkers();
   buildGameList();
-  buildValidation();
   gotoMove();
 };
 </script>
