@@ -1,312 +1,440 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Reproductor PGN Mejorado</title>
+<title>PGN Viewer</title>
 
 <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+<script src="pgn-parser.js"></script>
 
 <style>
-#boardContainer{
-  position: relative;
-  width: 400px;
-  height: 400px;
-}
+  body {
+    font-family: monospace;
+    display: flex;
+    gap: 20px;
+    padding: 16px;
+    flex-wrap: wrap;
+  }
 
-#board{
-  width: 100%;
-  height: 100%;
-}
+  #leftPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
 
-#gameOverlay{
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%,-50%);
-  color: red;
-  font-size: 32px;
-  font-weight: bold;
-  pointer-events: none;
-}
+  #boardContainer {
+    position: relative;
+    width: 400px;
+    height: 400px;
+    flex-shrink: 0;
+  }
 
-.arrow{
-  position: absolute;
-  height: 4px;
-  transform-origin: 0 0;
-  pointer-events: none;
-}
+  #board { width: 100%; height: 100%; }
 
-.arrowHead{
-  position: absolute;
-  width: 0;
-  height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-bottom: 14px solid;
-  pointer-events: none;
-}
+  /* SVG overlay inside boardContainer so coordinates are board-relative */
+  #arrowOverlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
 
-.circle{
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-  box-sizing: border-box;
-  border-width: 4px;
-}
+  .circle {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    box-sizing: border-box;
+    border-width: 4px;
+    border-style: solid;
+  }
 
-#movesBox{
-  width: 400px;
-  height: 80px;
-  margin-top: 10px;
-  font-size: 14px;
-}
+  #controls { display: flex; gap: 6px; flex-wrap: wrap; }
+  #controls button { padding: 6px 10px; cursor: pointer; }
+
+  #movesBox {
+    width: 400px;
+    min-height: 60px;
+    font-size: 13px;
+    line-height: 1.6;
+    background: #f9f9f9;
+    border: 1px solid #ccc;
+    padding: 6px;
+    box-sizing: border-box;
+  }
+
+  #rightPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 340px;
+    max-width: 520px;
+  }
+
+  #rightPanel h3 { margin: 0; font-size: 14px; }
+
+  #gameList {
+    font-size: 12px;
+    line-height: 1.7;
+    background: #f3f3f3;
+    border: 1px solid #ccc;
+    padding: 8px;
+    max-height: 580px;
+    overflow-y: auto;
+  }
+
+  .game-entry { margin-bottom: 6px; }
+  .game-entry .game-label {
+    font-weight: bold;
+    cursor: pointer;
+    color: #003080;
+  }
+  .game-entry .game-label:hover { text-decoration: underline; }
+  .game-entry .game-moves { color: #444; word-break: break-word; }
+
+  #validationBox {
+    font-size: 12px;
+    background: #fff8dc;
+    border: 1px solid #ccc;
+    padding: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .valid-ok  { color: green; }
+  .valid-err { color: red; }
 </style>
 </head>
 <body>
 
-<div id="boardContainer">
-  <div id="board"></div>
-  <div id="gameOverlay"></div>
+<div id="leftPanel">
+  <div id="boardContainer">
+    <div id="board"></div>
+    <!-- SVG lives inside boardContainer so line coordinates are relative to the board -->
+    <svg id="arrowOverlay">
+      <defs></defs>
+    </svg>
+  </div>
+
+  <div id="controls">
+    <button id="prevBtn">&#9664; Prev Move</button>
+    <button id="nextBtn">Next Move &#9654;</button>
+    <button id="prevGameBtn">&#9664;&#9664; Prev Game</button>
+    <button id="nextGameBtn">Next Game &#9654;&#9654;</button>
+  </div>
+
+  <div id="movesBox"></div>
 </div>
 
-<br>
-<button id="prevBtn">Previous</button>
-<button id="nextBtn">Next</button>
-<button id="prevGameBtn">Previous Partida</button>
-<button id="nextGameBtn">Siguiente Partida</button>
-
-<br><br>
-<div id="movesBox"></div>
+<div id="rightPanel">
+  <h3>All games (main line + variants)</h3>
+  <div id="gameList"></div>
+  <h3>Validation</h3>
+  <div id="validationBox"></div>
+</div>
 
 <script>
-const rawPGN=`
-1. e3 d5 { [%csl Ga6,Bb6,Rc6,Yd6,Gh6,Bg6,Rf6,Ye6][%cal Gb2b4,Bc2c4,Rd2d4,Ya2a4,Ge2f4,Bf2e4,Rg2g4,Yh2h4] }
+// ─────────────────────────────────────────────────────────────────────────────
+// Test PGN: Ruy Lopez with many variants (several nested)
+// ─────────────────────────────────────────────────────────────────────────────
+const rawPGN = `
+1. e4 { [%csl Ge4] } e5
 2. Nf3 Nc6
-3. Bc4 f6
-(3... g5 4. g3 f6 5. h3 h6 6. Rg1)
-4. g3 g6
-5. g4 g5 *
+  ( 2... f5
+    3. Nxe5 Qe7
+      ( 3... Nc6 4. Nc3 Nf6 )
+    4. Nf3 fxe4 5. Ne5 )
+  ( 2... d6
+    3. d4 exd4
+      ( 3... Nd7 4. Bc4 Be7 5. O-O )
+    4. Nxd4 Nf6 5. Nc3 )
+3. Bb5 a6
+  ( 3... Nf6
+    4. O-O Nxe4
+      ( 4... d6 5. d4 exd4 6. e5 dxe5 7. Nxe5 )
+    5. d4
+      ( 5. Re1 Nd6 6. Nxe5 Be7 7. Nf3 )
+      ( 5. d3 Nf6 6. Nc3 Be7 )
+    5... exd4 6. Re1 d5 )
+  ( 3... Bc5
+    4. c3 Nf6
+      ( 4... Qe7 5. O-O Nf6
+          ( 5... d6 6. d4 Bb6 )
+        6. d4 )
+    5. d4 exd4 6. cxd4 Bb4+ 7. Nc3 Nxe4 )
+  ( 3... d6
+    4. d4 Bd7 5. Nc3 Nf6
+      ( 5... g6 6. O-O Bg7 )
+    6. O-O Be7 )
+4. Ba4 Nf6
+5. O-O Be7
+  ( 5... b5 6. Bb3 Bc5
+      ( 6... Na5 7. c3 d6
+          ( 7... c5 8. d4 )
+        8. d4 )
+    7. c3 d6 8. d4 )
+6. Re1 b5
+  ( 6... d6
+    7. c3 O-O 8. h3 Na5 9. Bc2 c5 )
+7. Bb3 d6
+  ( 7... O-O 8. c3 d5
+      ( 8... d6 9. h3 Na5 10. Bc2 c5 )
+    9. exd5 Nxd5 10. Nxe5 Nxe5 11. Rxe5 )
+8. c3 O-O *
 `;
 
-function splitPGNVariants(pgn){
-  const variants=[]; let mainPGN=pgn;
-  const regex=/\(([^()]+)\)/g; let match;
-  while((match=regex.exec(pgn))!==null){
-    let v=match[1].trim();
-    const startsBlack=/^\d+\.\.\./.test(v);
-    let firstWhiteMove=pgn.match(/1\.\s*([^\s]+)/)[1];
-    v=v.replace(/\d+\.\.\./g,'').replace(/\d+\./g,'').replace(/\s+/g,' ').trim();
-    const tokens=v.split(' '); let san="";
-    if(startsBlack){ san+="1. "+firstWhiteMove+" "+tokens[0]+" "; let n=2,i=1;
-      while(i<tokens.length){ san+=n+". "+tokens[i]+" "; if(tokens[i+1])san+=tokens[i+1]+" "; n++; i+=2; }
-    }else{ let n=1; for(let i=0;i<tokens.length;i+=2){ san+=n+". "+tokens[i]+" "; if(tokens[i+1])san+=tokens[i+1]+" "; n++; } }
-    variants.push(san.trim()); mainPGN=mainPGN.replace(match[0],'').trim();
-  }
-  return [mainPGN,...variants];
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Parse all games
+// ─────────────────────────────────────────────────────────────────────────────
+const pgnData = parsePGN(rawPGN);
+console.log('Total games (main + variants):', pgnData.length);
+pgnData.forEach((g, i) => console.log('Game', i + 1, ':', g.moves.map(m => m.san).join(' ')));
 
-function extractAnnotations(pgn){
-  const arrowMap={G:"green",R:"red",B:"blue",Y:"yellow"};
-  const annotations={}; let moveIndex=0;
-  const regex=/\{([^}]+)\}/g; let match;
-  while((match=regex.exec(pgn))!==null){
-    const text=match[1]; annotations[moveIndex]={arrows:[],circles:[]};
-    const cal=text.match(/\[%cal ([^\]]+)\]/); const csl=text.match(/\[%csl ([^\]]+)\]/);
-    if(cal){ cal[1].split(',').forEach(a=>{ const color=arrowMap[a[0]]; annotations[moveIndex].arrows.push({from:a.slice(1,3),to:a.slice(3,5),color}); }); }
-    if(csl){ csl[1].split(',').forEach(c=>{ const color=arrowMap[c[0]]; annotations[moveIndex].circles.push({square:c.slice(1,3),color}); }); }
-    moveIndex++;
-  }
-  return annotations;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Board state
+// ─────────────────────────────────────────────────────────────────────────────
+let board, chess;
+let currentVar = 0, currentMove = 0;
 
-function parsePGNsToData(pgnList){
-  const pgnData=[];
-  pgnList.forEach(pgn=>{
-    const chess=new Chess(); chess.load_pgn(pgn);
-    const history=chess.history({verbose:true});
-    const moves=history.map(m=>({from:m.from,to:m.to,san:m.san,arrows:[],circles:[]}));
-    pgnData.push({moves});
-  });
-  return pgnData;
-}
-
-const pgnList=splitPGNVariants(rawPGN);
-const pgnData=parsePGNsToData(pgnList);
-const annotations=extractAnnotations(rawPGN);
-Object.keys(annotations).forEach(i=>{ pgnData[0].moves[i].arrows=annotations[i].arrows; pgnData[0].moves[i].circles=annotations[i].circles; });
-
-let board,chess;
-let currentVar=0,currentMove=0;
-
-window.onload=function(){
-  chess=new Chess();
-  board=Chessboard('board',{position:'start',pieceTheme:'https://raw.githubusercontent.com/oakmac/chessboardjs/master/website/img/chesspieces/wikipedia/{piece}.png'});
-  gotoMove();
-};
-
-function updateOverlay(){
-  const el=document.getElementById("gameOverlay");
-  el.innerText=(currentMove===0)?"Partida "+(currentVar+1):"";
-}
-
-function updateMovesBox(){
-  const partida=pgnData[currentVar];
-  let text="Partida "+(currentVar+1)+"/"+pgnData.length+"\n";
-  let n=1;
-  for(let i=0;i<partida.moves.length;i++){
-    if(i%2===0) text+=n++ +". ";
-    if(i===currentMove-1) text+="<b style='font-size:16px;color:black;'>"+partida.moves[i].san+"</b> ";
-    else text+=partida.moves[i].san+" ";
-  }
-  let currentMoveText=(currentMove>0)?partida.moves[currentMove-1].san:"START";
-  document.getElementById("movesBox").innerHTML=text+"<br><br>Movimiento actual: <b>"+currentMoveText+"</b>";
-}
-
-function clearOverlays(){
-  // Borrar todos los divs de círculos
-  document.querySelectorAll('.circle').forEach(e=>e.remove());
-
-  if(!svgOverlay) return;
-
-  // Borrar todas las flechas (líneas) dentro del SVG, excepto defs
-  Array.from(svgOverlay.children).forEach(child=>{
-    if(child.tagName.toLowerCase() !== "defs"){
-      svgOverlay.removeChild(child);
-    }
-  });
-}
-
-function squareCenter(sq){
-  const file=sq.charCodeAt(0)-97; const rank=8-parseInt(sq[1]);
-  const size=document.getElementById("board").offsetWidth/8;
-  return {x:file*size+size/2,y:rank*size+size/2};
-}
-
-// SVG global único
-let svgOverlay = null;
-
-function initSVGOverlay() {
-  if(svgOverlay) return;
-  const container = document.body;
-  svgOverlay = document.createElementNS("http://www.w3.org/2000/svg","svg");
-  svgOverlay.style.position="absolute";
-  svgOverlay.style.left="0"; svgOverlay.style.top="0";
-  svgOverlay.style.width="100%";
-  svgOverlay.style.height="100%";
-  svgOverlay.style.pointerEvents="none";
-
-  const defs=document.createElementNS("http://www.w3.org/2000/svg","defs");
-
-  const colors = ["green","red","blue","yellow"];
-  colors.forEach(c=>{
-    const marker=document.createElementNS("http://www.w3.org/2000/svg","marker");
-    marker.setAttribute("id","arrowhead_"+c);
-    marker.setAttribute("markerWidth","10");
-    marker.setAttribute("markerHeight","7");
-    marker.setAttribute("refX","0");
-    marker.setAttribute("refY","3.5");
-    marker.setAttribute("orient","auto");
-    marker.setAttribute("markerUnits", "userSpaceOnUse");
-    const polygon=document.createElementNS("http://www.w3.org/2000/svg","polygon");
-    polygon.setAttribute("points","0 0, 10 3.5, 0 7");
-    polygon.setAttribute("fill",c);
-    marker.appendChild(polygon);
+// ─────────────────────────────────────────────────────────────────────────────
+// Arrow markers
+// ─────────────────────────────────────────────────────────────────────────────
+function initArrowMarkers() {
+  const svg  = document.getElementById('arrowOverlay');
+  const defs = svg.querySelector('defs');
+  ['green', 'red', 'blue', 'yellow'].forEach(color => {
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', 'ah_' + color);
+    marker.setAttribute('markerWidth',  '4');
+    marker.setAttribute('markerHeight', '4');
+    marker.setAttribute('refX', '2.5');
+    marker.setAttribute('refY', '2');
+    marker.setAttribute('orient', 'auto');
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    poly.setAttribute('points', '0 0, 4 2, 0 4');
+    poly.setAttribute('fill', color);
+    marker.appendChild(poly);
     defs.appendChild(marker);
   });
-
-  svgOverlay.appendChild(defs);
-  container.appendChild(svgOverlay);
 }
 
-function drawOverlays(node){
-  console.log("drawOverlays: inicio");
+// ─────────────────────────────────────────────────────────────────────────────
+// Overlay drawing (coordinates relative to boardContainer)
+// ─────────────────────────────────────────────────────────────────────────────
+function clearOverlays() {
+  const svg = document.getElementById('arrowOverlay');
+  Array.from(svg.children).forEach(child => {
+    if (child.tagName.toLowerCase() !== 'defs') svg.removeChild(child);
+  });
+  document.querySelectorAll('.circle').forEach(e => e.remove());
+}
+
+function squareCenter(sq, squareSize) {
+  const file = sq.charCodeAt(0) - 97;        // a=0 ... h=7
+  const rank = 8 - parseInt(sq[1], 10);      // rank8=0(top) ... rank1=7(bottom)
+  return {
+    x: file * squareSize + squareSize / 2,
+    y: rank * squareSize + squareSize / 2
+  };
+}
+
+function drawOverlays(moveData) {
   clearOverlays();
-  initSVGOverlay();
+  if (!moveData) return;
 
-  if(!node) { console.log("drawOverlays: node vacío"); return; }
+  const boardEl    = document.getElementById('board');
+  const squareSize = boardEl.offsetWidth / 8;
+  const svg        = document.getElementById('arrowOverlay');
+  const container  = document.getElementById('boardContainer');
 
-  const rect=document.getElementById("board").getBoundingClientRect();
-  const container = document.getElementById("boardContainer"); 
-  const size=rect.width/8;
-  const triangleSize = 50
+  // Draw arrows
+  moveData.arrows.forEach(a => {
+    const from = squareCenter(a.from, squareSize);
+    const to   = squareCenter(a.to,   squareSize);
+    const dx   = to.x - from.x;
+    const dy   = to.y - from.y;
+    const len  = Math.sqrt(dx * dx + dy * dy);
+    // Trim line end so arrowhead is visible
+    const shorten = squareSize * 0.35;
+    const ux = dx / len, uy = dy / len;
 
-  node.arrows.forEach(a=>{
-    const fx = a.from.charCodeAt(0) - 97;
-    const fy = 8 - parseInt(a.from[1]);
-    const tx = a.to.charCodeAt(0) - 97;
-    const ty = 8 - parseInt(a.to[1]);
-
-    // Posición relativa dentro del tablero
-    const x1 = fx*size + size/2 + Math.abs(8-fx);
-    const y1 = fy*size + size/2;
-    const x2 = tx*size + size/2 + Math.abs(8-tx);
-    const y2 = ty*size + size/2;
-
-    const line=document.createElementNS("http://www.w3.org/2000/svg","line");
-    line.setAttribute("x1",x1);
-    line.setAttribute("y1",y1);
-    line.setAttribute("x2",x2);
-    line.setAttribute("y2",y2);
-    line.setAttribute("stroke",a.color);
-    line.setAttribute("stroke-width","2");
-    line.setAttribute("marker-end","url(#arrowhead_"+a.color+")");
-    svgOverlay.appendChild(line);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', from.x);
+    line.setAttribute('y1', from.y);
+    line.setAttribute('x2', to.x - ux * shorten);
+    line.setAttribute('y2', to.y - uy * shorten);
+    line.setAttribute('stroke', a.color);
+    line.setAttribute('stroke-width', squareSize * 0.14);
+    line.setAttribute('stroke-opacity', '0.75');
+    line.setAttribute('marker-end', 'url(#ah_' + a.color + ')');
+    svg.appendChild(line);
   });
 
-  node.circles.forEach(c => {
-    const fx = c.square.charCodeAt(0) - 97;
-    const fy = 8 - parseInt(c.square[1]);
-
-    const circleSize = size * 0.8
-    const x = rect.left + fx * size - fx/2;
-    const y = rect.top + fy * size;
-
-    const el = document.createElement("div");
-    el.className = "circle";
-
-    el.style.left = x + "px";
-    el.style.top = y + "px";
-    el.style.width = size-2 + "px";      // tamaño de la casilla
-    el.style.height = size + "px";     // tamaño de la casilla
-    el.style.border = "4px solid " + c.color;
-    el.style.boxSizing = "border-box";
-    el.style.borderRadius = "50%";
-
-    document.body.appendChild(el);
-});
-
-  console.log("drawOverlays: fin");
+  // Draw circles (appended inside boardContainer so position is board-relative)
+  moveData.circles.forEach(c => {
+    const file = c.square.charCodeAt(0) - 97;
+    const rank = 8 - parseInt(c.square[1], 10);
+    const el = document.createElement('div');
+    el.className = 'circle';
+    el.style.left        = (file * squareSize) + 'px';
+    el.style.top         = (rank * squareSize) + 'px';
+    el.style.width       = squareSize + 'px';
+    el.style.height      = squareSize + 'px';
+    el.style.borderColor = c.color;
+    container.appendChild(el);
+  });
 }
 
-
-
-function gotoMove(){
+// ─────────────────────────────────────────────────────────────────────────────
+// Board rendering
+// ─────────────────────────────────────────────────────────────────────────────
+function gotoMove() {
   chess.reset();
-  const partida=pgnData[currentVar];
-  for(let i=0;i<currentMove;i++) chess.move(partida.moves[i]);
+  const game = pgnData[currentVar];
+  for (let i = 0; i < currentMove; i++) {
+    const result = chess.move(game.moves[i].san);
+    if (!result) {
+      console.error('Illegal move', game.moves[i].san, 'in game', currentVar + 1, 'at index', i);
+      break;
+    }
+  }
   board.position(chess.fen());
-  updateOverlay(); updateMovesBox();
-  if(currentMove>0) drawOverlays(partida.moves[currentMove-1]);
+  updateMovesBox();
+  if (currentMove > 0) drawOverlays(game.moves[currentMove - 1]);
   else clearOverlays();
 }
 
-document.getElementById("nextBtn").onclick=function(){const partida=pgnData[currentVar]; if(currentMove<partida.moves.length){ currentMove++; gotoMove(); } else if(currentVar<pgnData.length-1){ currentVar++; currentMove=0; gotoMove(); }};
-document.getElementById("prevBtn").onclick = function() {
+function updateMovesBox() {
+  const game = pgnData[currentVar];
+  let html = '<b>Game ' + (currentVar + 1) + ' / ' + pgnData.length + '</b><br>';
+  let n = 1;
+  for (let i = 0; i < game.moves.length; i++) {
+    if (i % 2 === 0) html += n++ + '. ';
+    const san = game.moves[i].san;
+    if (i === currentMove - 1) {
+      html += '<b style="font-size:15px;color:#900;">' + san + '</b> ';
+    } else {
+      html += san + ' ';
+    }
+  }
+  const currentLabel = currentMove > 0 ? game.moves[currentMove - 1].san : 'START';
+  html += '<br><small>Current: <b>' + currentLabel + '</b></small>';
+  document.getElementById('movesBox').innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Right panel: list of all games
+// ─────────────────────────────────────────────────────────────────────────────
+function buildGameList() {
+  const container = document.getElementById('gameList');
+  container.innerHTML = '';
+  pgnData.forEach((game, idx) => {
+    const label = idx === 0 ? 'Main line' : 'Variant ' + idx;
+    let movesHtml = '';
+    let n = 1;
+    game.moves.forEach((m, i) => {
+      if (i % 2 === 0) movesHtml += n++ + '. ';
+      movesHtml += m.san + ' ';
+    });
+
+    const div = document.createElement('div');
+    div.className = 'game-entry';
+    div.innerHTML =
+      '<span class="game-label" data-idx="' + idx + '">&#9654; Game ' + (idx + 1) +
+      ' &ndash; ' + label + ' (' + game.moves.length + ' half-moves)</span><br>' +
+      '<span class="game-moves">' + movesHtml.trim() + '</span>';
+    container.appendChild(div);
+  });
+
+  container.addEventListener('click', e => {
+    const t = e.target.closest('.game-label');
+    if (!t) return;
+    currentVar  = parseInt(t.dataset.idx, 10);
+    currentMove = 0;
+    gotoMove();
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Validation panel
+// ─────────────────────────────────────────────────────────────────────────────
+function buildValidation() {
+  const results  = validateGames(pgnData);
+  const container = document.getElementById('validationBox');
+  let html = '';
+  results.forEach(r => {
+    const label = r.index === 0 ? 'Main line' : 'Variant ' + r.index;
+    if (r.valid) {
+      html += '<div class="valid-ok">&#10004; Game ' + (r.index + 1) + ' (' + label + ') &mdash; ' + r.moves + ' half-moves</div>';
+    } else {
+      html += '<div class="valid-err">&#10008; Game ' + (r.index + 1) + ' (' + label + ') &mdash; ' + r.error + '</div>';
+    }
+  });
+  container.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Controls
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('nextBtn').onclick = function () {
+  const game = pgnData[currentVar];
+  if (currentMove < game.moves.length) {
+    currentMove++;
+    gotoMove();
+  } else if (currentVar < pgnData.length - 1) {
+    currentVar++;
+    currentMove = 0;
+    gotoMove();
+  }
+};
+
+document.getElementById('prevBtn').onclick = function () {
   if (currentMove > 0) {
     currentMove--;
     gotoMove();
   } else if (currentVar > 0) {
-    // Pasar a la última jugada de la partida anterior
     currentVar--;
     currentMove = pgnData[currentVar].moves.length;
     gotoMove();
   }
 };
-document.getElementById("nextGameBtn").onclick=function(){if(currentVar<pgnData.length-1){ currentVar++; currentMove=0; gotoMove(); }};
-document.getElementById("prevGameBtn").onclick=function(){if(currentMove>0){ currentMove=0; gotoMove(); } else if(currentVar>0){ currentVar--; currentMove=0; gotoMove(); }};
+
+document.getElementById('nextGameBtn').onclick = function () {
+  if (currentVar < pgnData.length - 1) {
+    currentVar++;
+    currentMove = 0;
+    gotoMove();
+  }
+};
+
+document.getElementById('prevGameBtn').onclick = function () {
+  if (currentMove > 0) {
+    currentMove = 0;
+    gotoMove();
+  } else if (currentVar > 0) {
+    currentVar--;
+    currentMove = 0;
+    gotoMove();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────────────────────
+window.onload = function () {
+  chess = new Chess();
+  board = Chessboard('board', {
+    position: 'start',
+    pieceTheme: 'https://raw.githubusercontent.com/oakmac/chessboardjs/master/website/img/chesspieces/wikipedia/{piece}.png'
+  });
+  initArrowMarkers();
+  buildGameList();
+  buildValidation();
+  gotoMove();
+};
 </script>
 </body>
 </html>
