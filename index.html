@@ -319,9 +319,23 @@ function updateMovesBox() {
   const game = pgnData[currentVar];
   let html = '<b>Game ' + (currentVar + 1) + ' / ' + pgnData.length + '</b><br>';
   let n = 1;
+  // Map English piece letters to Spanish
+  function sanToSpanish(san) {
+    return san
+      .replace(/^K/, 'R')   // King -> Rey
+      .replace(/^Q/, 'D')   // Queen -> Dama
+      .replace(/^R/, 'T')   // Rook -> Torre
+      .replace(/^B/, 'A')   // Bishop -> Alfil
+      .replace(/^N/, 'C')   // Knight -> Caballo
+      .replace(/([=])K/, '$1R')
+      .replace(/([=])Q/, '$1D')
+      .replace(/([=])R/, '$1T')
+      .replace(/([=])B/, '$1A')
+      .replace(/([=])N/, '$1C');
+  }
   for (let i = 0; i < game.moves.length; i++) {
     if (i % 2 === 0) html += n++ + '. ';
-    const san = game.moves[i].san;
+    const san = sanToSpanish(game.moves[i].san);
     if (i === currentMove - 1) {
       html += '<b style="font-size:15px;color:#900;">' + san + '</b> ';
     } else {
@@ -337,13 +351,27 @@ function updateMovesBox() {
 function buildGameList() {
   const container = document.getElementById('gameList');
   container.innerHTML = '';
+  // Map English piece letters to Spanish
+  function sanToSpanish(san) {
+    return san
+      .replace(/^K/, 'R')   // King -> Rey
+      .replace(/^Q/, 'D')   // Queen -> Dama
+      .replace(/^R/, 'T')   // Rook -> Torre
+      .replace(/^B/, 'A')   // Bishop -> Alfil
+      .replace(/^N/, 'C')   // Knight -> Caballo
+      .replace(/([=])K/, '$1R')
+      .replace(/([=])Q/, '$1D')
+      .replace(/([=])R/, '$1T')
+      .replace(/([=])B/, '$1A')
+      .replace(/([=])N/, '$1C');
+  }
   pgnData.forEach((game, idx) => {
     const label = idx === 0 ? 'Main line' : 'Variant ' + idx;
     let movesHtml = '';
     let n = 1;
     game.moves.forEach((m, i) => {
       if (i % 2 === 0) movesHtml += n++ + '. ';
-      movesHtml += m.san + ' ';
+      movesHtml += sanToSpanish(m.san) + ' ';
     });
 
     const div = document.createElement('div');
