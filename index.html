@@ -195,9 +195,14 @@ const rawPGN2 = `
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Parse all games
+// Parse all games and sort alphabetically by moves string
 // ─────────────────────────────────────────────────────────────────────────────
-const pgnData = parsePGN(rawPGN);
+let pgnData = parsePGN(rawPGN);
+// Helper to get moves as a string (for sorting)
+function movesString(game) {
+  return game.moves.map(m => m.san).join(' ');
+}
+pgnData = pgnData.slice().sort((a, b) => movesString(a).localeCompare(movesString(b)));
 console.log('Total games (main + variants):', pgnData.length);
 pgnData.forEach((g, i) => console.log('Game', i + 1, ':', g.moves.map(m => m.san).join(' ')));
 
