@@ -5,6 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>PGN Viewer</title>
 
+<!-- Add to home screen for Android -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1976d2">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" sizes="192x192" href="icon-192.png">
+
+<!-- Add to home screen for iOS -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Test Pages App">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<!-- Splash screen for iOS (optional, can add more sizes) -->
+<link rel="apple-touch-startup-image" href="icon-512.png">
+
 <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
@@ -23,6 +38,8 @@
     flex-direction: column;
     align-items: stretch;
     min-height: 100dvh;
+    /* Prevent pull-to-refresh and overscroll on mobile */
+    overscroll-behavior-y: contain;
   }
 
   /* Board fills the full screen width */
@@ -204,6 +221,14 @@ function movesString(game) {
 }
 pgnData = pgnData.slice().sort((a, b) => movesString(a).localeCompare(movesString(b)));
 console.log('Total games (main + variants):', pgnData.length);
+pgnData.forEach((g, i) => console.log('Game', i + 1, ':', g.moves.map(m => m.san).join(' ')));
+
+// Register Service Worker for offline support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('service-worker.js');
+  });
+}
 pgnData.forEach((g, i) => console.log('Game', i + 1, ':', g.moves.map(m => m.san).join(' ')));
 
 // ─────────────────────────────────────────────────────────────────────────────
