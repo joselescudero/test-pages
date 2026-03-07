@@ -536,7 +536,13 @@ function startAutomove() {
     if (currentMove < game.moves.length) {
       currentMove++;
       gotoMove();
+    } else if (currentVar < pgnData.length - 1) {
+      // At end of current variant, move to next variant and continue automove
+      currentVar++;
+      currentMove = getIgnoreMoves();
+      gotoMove();
     } else {
+      // At end of last variant, stop automove
       stopAutomove();
       document.getElementById('automoveCheck').checked = false;
     }
