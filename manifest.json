@@ -1,7 +1,7 @@
 {
   "name": "Test Pages App",
   "short_name": "TestPages",
-  "start_url": "./index.html",
+  "start_url": "/test-pages/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1976d2",

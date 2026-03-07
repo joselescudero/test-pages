@@ -8,7 +8,7 @@
 <!-- Add to home screen for Android -->
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1976d2">
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="/test-pages/manifest.json">
 <link rel="icon" sizes="192x192" href="icon-192.png">
 
 <!-- Add to home screen for iOS -->
@@ -135,6 +135,13 @@
     padding: 2px 0;
   }
   .game-entry .game-moves { color: #555; word-break: break-word; font-size: 12px; }
+
+  /* Highlight for last move squares */
+  .highlight-square {
+    background: radial-gradient(circle, #ffe680 60%, #f0d000 100%) !important;
+    box-shadow: 0 0 8px 2px #f0d00099;
+    z-index: 1;
+  }
 </style>
 </head>
 <body>
@@ -226,7 +233,7 @@ pgnData.forEach((g, i) => console.log('Game', i + 1, ':', g.moves.map(m => m.san
 // Register Service Worker for offline support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('service-worker.js');
+    navigator.serviceWorker.register('/test-pages/service-worker.js');
   });
 }
 pgnData.forEach((g, i) => console.log('Game', i + 1, ':', g.moves.map(m => m.san).join(' ')));
@@ -332,14 +339,28 @@ function drawOverlays(moveData) {
 function gotoMove() {
   chess.reset();
   const game = pgnData[currentVar];
+  // Remove previous highlights
+  document.querySelectorAll('.square-55d63').forEach(el => el.classList.remove('highlight-square'));
+  let fromSq = null, toSq = null;
   for (let i = 0; i < currentMove; i++) {
-    const result = chess.move(game.moves[i].san);
-    if (!result) {
+    const move = chess.move(game.moves[i].san);
+    if (!move) {
       console.error('Illegal move', game.moves[i].san, 'in game', currentVar + 1, 'at index', i);
       break;
     }
+    if (i === currentMove - 1) {
+      fromSq = move.from;
+      toSq = move.to;
+    }
   }
   board.position(chess.fen());
+  // Highlight last move squares
+  if (fromSq && toSq) {
+    const fromEl = document.querySelector('.square-' + fromSq);
+    const toEl = document.querySelector('.square-' + toSq);
+    if (fromEl) fromEl.classList.add('highlight-square');
+    if (toEl) toEl.classList.add('highlight-square');
+  }
   updateMovesBox();
   if (currentMove > 0) drawOverlays(game.moves[currentMove - 1]);
   else clearOverlays();

@@ -1,12 +1,13 @@
 // Service Worker for offline support
 const CACHE_NAME = 'test-pages-cache-v1';
+const BASE_PATH = '/test-pages';
 const FILES_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/pgn-parser.js',
-  '/icon-192.png',
-  '/icon-512.png',
+  BASE_PATH + '/',
+  BASE_PATH + '/index.html',
+  BASE_PATH + '/manifest.json',
+  BASE_PATH + '/pgn-parser.js',
+  BASE_PATH + '/icon-192.png',
+  BASE_PATH + '/icon-512.png',
   // Add more files if needed
 ];
 
