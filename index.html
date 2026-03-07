@@ -137,11 +137,14 @@
   }
   .game-entry .game-moves { color: #555; word-break: break-word; font-size: 12px; }
 
-  /* Highlight for last move squares */
-  .highlight-square {
-    background: radial-gradient(circle, #ffe680 60%, #f0d000 100%) !important;
-    box-shadow: 0 0 8px 2px #f0d00099;
-    z-index: 1;
+  /* Highlight for last move squares — subtle tonal shift */
+  /* Light squares (#f0d9b5) get a slightly warmer/lighter tone */
+  .highlight-square.white-1e1d7 {
+    background: #f7e5c0 !important;
+  }
+  /* Dark squares (#b58863) get a slightly lighter/brighter tone */
+  .highlight-square.black-3c85d {
+    background: #c89b72 !important;
   }
 </style>
 </head>
@@ -237,7 +240,6 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/test-pages/service-worker.js');
   });
 }
-pgnData.forEach((g, i) => console.log('Game', i + 1, ':', g.moves.map(m => m.san).join(' ')));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Board state
