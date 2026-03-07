@@ -137,14 +137,16 @@
   }
   .game-entry .game-moves { color: #555; word-break: break-word; font-size: 12px; }
 
-  /* Highlight for last move squares — subtle tonal shift */
-  /* Light squares (#f0d9b5) get a slightly warmer/lighter tone */
+  /* Highlight for last move squares — subtle tonal shift + border */
   .highlight-square.white-1e1d7 {
     background: #f7e5c0 !important;
+    outline: 2px solid rgba(100, 60, 10, 0.60);
+    outline-offset: -4px;
   }
-  /* Dark squares (#b58863) get a slightly lighter/brighter tone */
   .highlight-square.black-3c85d {
     background: #c89b72 !important;
+    outline: 2px solid rgba(40, 15, 0, 0.55);
+    outline-offset: -4px;
   }
 </style>
 </head>
