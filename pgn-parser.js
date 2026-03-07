@@ -53,7 +53,10 @@ function tokenizePGN(pgn) {
     // NAG (Numeric Annotation Glyph): $1, $2, ...
     if (ch === '$') {
       i++;
+      const numStart = i;
       while (i < len && /\d/.test(pgn[i])) i++;
+      const nagNum = parseInt(pgn.slice(numStart, i), 10);
+      if (!isNaN(nagNum)) tokens.push({ type: 'nag', num: nagNum });
       continue;
     }
 
@@ -134,6 +137,7 @@ function parseVariantLine(tokens, pos, ancestorMoves, allGames) {
   // Deep-copy ancestor moves so each line is independent
   const moves = ancestorMoves.map(m => ({
     san: m.san,
+    nags: m.nags ? [...m.nags] : [],
     arrows: m.arrows.map(a => ({ ...a })),
     circles: m.circles.map(c => ({ ...c }))
   }));
@@ -158,8 +162,13 @@ function parseVariantLine(tokens, pos, ancestorMoves, allGames) {
 
     if (t.type === 'move') {
       pos.i++;
-      const move = { san: t.san, arrows: [], circles: [] };
-      // Consume any immediately following comment as annotation for this move
+      const move = { san: t.san, nags: [], arrows: [], circles: [] };
+      // Consume NAGs immediately following the move
+      while (pos.i < tokens.length && tokens[pos.i].type === 'nag') {
+        move.nags.push(tokens[pos.i].num);
+        pos.i++;
+      }
+      // Consume optional comment annotation
       if (pos.i < tokens.length && tokens[pos.i].type === 'comment') {
         const ann = parseAnnotation(tokens[pos.i].text);
         move.arrows = ann.arrows;

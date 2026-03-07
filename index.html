@@ -43,14 +43,15 @@
     overscroll-behavior-y: contain;
   }
 
-  /* Board fills the full screen width */
+  /* Board fills the full screen width with small margins */
   #boardContainer {
     position: relative;
-    width: 100vw;
-    height: 100vw;   /* square */
+    width: calc(100vw - 10px);
+    height: calc(100vw - 10px);
     max-width: 600px;
     max-height: 600px;
     align-self: center;
+    margin-top: 5px;
     flex-shrink: 0;
   }
 
@@ -105,17 +106,27 @@
     word-break: break-word;
   }
 
-  #gamesSection {
-    padding: 0 8px 16px;
+  /* NAG annotation box */
+  #nagBox {
+    font-size: 13px;
+    font-style: italic;
+    color: #7a5800;
+    background: #fff8ee;
+    border-left: 3px solid #c8a000;
+    padding: 4px 10px;
   }
 
-  #gamesSection h3 {
-    font-size: 13px;
-    color: #555;
-    margin: 12px 0 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+  /* Tabs */
+  #tabsArea { display: flex; flex-direction: column; flex: 1; }
+  #tabBar { display: flex; border-bottom: 2px solid #ddd; background: #f7f7f7; }
+  .tab-btn {
+    flex: 1; padding: 8px 0; font-size: 13px; font-weight: bold;
+    border: none; background: none; color: #555; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   }
+  .tab-btn.active { color: #003080; border-bottom: 2px solid #003080; background: #fff; }
+  .tab-pane { padding: 8px; }
 
   #gameList {
     font-size: 13px;
@@ -136,6 +147,18 @@
     padding: 2px 0;
   }
   .game-entry .game-moves { color: #555; word-break: break-word; font-size: 12px; }
+
+  /* Config tab */
+  .config-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 4px; border-bottom: 1px solid #eee;
+  }
+  .config-row:last-child { border-bottom: none; }
+  .config-label { font-size: 14px; color: #333; display: flex; align-items: center; gap: 8px; }
+  .config-input {
+    width: 80px; font-size: 14px; padding: 4px 6px;
+    border: 1px solid #ccc; border-radius: 4px; text-align: right;
+  }
 
   /* Highlight for last move squares — subtle tonal shift + border */
   .highlight-square.white-1e1d7 {
@@ -166,9 +189,29 @@
 
 <div id="movesBox"></div>
 
-<div id="gamesSection">
-  <h3>Partidas</h3>
-  <div id="gameList"></div>
+<div id="nagBox" style="display:none"></div>
+
+<div id="tabsArea">
+  <div id="tabBar">
+    <button class="tab-btn active" data-tab="partidas" onclick="switchTab('partidas')">Partidas</button>
+    <button class="tab-btn" data-tab="config" onclick="switchTab('config')">Config</button>
+  </div>
+  <div id="tab-partidas" class="tab-pane">
+    <div id="gameList"></div>
+  </div>
+  <div id="tab-config" class="tab-pane" style="display:none">
+    <div class="config-row">
+      <label class="config-label"><input type="checkbox" id="automoveCheck"> Automove</label>
+    </div>
+    <div class="config-row">
+      <label class="config-label">Milisegundos entre jugadas</label>
+      <input type="number" id="automoveMs" value="2000" min="100" class="config-input">
+    </div>
+    <div class="config-row">
+      <label class="config-label">Ignorar primeras N jugadas</label>
+      <input type="number" id="ignoreMoves" value="0" min="0" class="config-input">
+    </div>
+  </div>
 </div>
 
 <script>
@@ -397,6 +440,19 @@ function updateMovesBox() {
     }
   }
   document.getElementById('movesBox').innerHTML = html;
+  // Show NAG description for current move
+  const nagBox = document.getElementById('nagBox');
+  const curMove = currentMove > 0 ? game.moves[currentMove - 1] : null;
+  const nagTexts = (curMove && curMove.nags && curMove.nags.length)
+    ? curMove.nags.map(n => NAG_DESCRIPTIONS[n]).filter(Boolean)
+    : [];
+  if (nagTexts.length) {
+    nagBox.textContent = nagTexts.join(' · ');
+    nagBox.style.display = '';
+  } else {
+    nagBox.textContent = '';
+    nagBox.style.display = 'none';
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -435,28 +491,87 @@ function buildGameList() {
   container.addEventListener('click', e => {
     const t = e.target.closest('.game-label');
     if (!t) return;
+    stopAutomove();
     currentVar  = parseInt(t.dataset.idx, 10);
-    currentMove = 0;
+    currentMove = getIgnoreMoves();
     gotoMove();
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NAG descriptions in Spanish
+// ─────────────────────────────────────────────────────────────────────────────
+const NAG_DESCRIPTIONS = {
+  1: '! Buena jugada', 2: '? Error', 3: '!! Jugada brillante',
+  4: '?? Error grave', 5: '!? Jugada interesante', 6: '?! Jugada dudosa',
+  7: '□ Única jugada', 10: '= Posición igualada', 13: '∞ Posición poco clara',
+  14: '⩲ Las blancas están ligeramente mejor', 15: '⩱ Las negras están ligeramente mejor',
+  16: '± Las blancas están mejor', 17: '∓ Las negras están mejor',
+  18: '+- Las blancas tienen ventaja decisiva', 19: '-+ Las negras tienen ventaja decisiva',
+  22: '⊙ Las blancas tienen zugzwang', 23: '⊙ Las negras tienen zugzwang',
+  32: '⟳ Las blancas tienen ventaja en desarrollo', 33: '⟳ Las negras tienen ventaja en desarrollo',
+  36: '→ Las blancas tienen la iniciativa', 37: '→ Las negras tienen la iniciativa',
+  40: '↑ Las blancas atacan', 41: '↑ Las negras atacan',
+  44: '⌓ Las blancas tienen compensación', 45: '⌓ Las negras tienen compensación',
+  132: '⇆ Las blancas tienen contrajuego', 133: '⇆ Las negras tienen contrajuego',
+  138: '⊕ Las blancas con ligera presión de tiempo', 139: '⊕ Las negras con ligera presión de tiempo',
+  140: '△ Con la idea...', 141: '▽ Con la amenaza...', 142: '⌀ La mejor jugada sería', 143: '⌀ Peor sería',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Automove, Ignore Moves, and Tab helpers
+// ─────────────────────────────────────────────────────────────────────────────
+let automoveTimer = null;
+
+function getIgnoreMoves() {
+  const val = parseInt(document.getElementById('ignoreMoves').value);
+  return isNaN(val) ? 0 : Math.max(0, val);
+}
+
+function startAutomove() {
+  stopAutomove();
+  const ms = Math.max(100, parseInt(document.getElementById('automoveMs').value) || 2000);
+  automoveTimer = setInterval(() => {
+    const game = pgnData[currentVar];
+    if (currentMove < game.moves.length) {
+      currentMove++;
+      gotoMove();
+    } else {
+      stopAutomove();
+      document.getElementById('automoveCheck').checked = false;
+    }
+  }, ms);
+}
+
+function stopAutomove() {
+  if (automoveTimer) { clearInterval(automoveTimer); automoveTimer = null; }
+}
+
+function switchTab(tabName) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tabName).style.display = '';
+  document.querySelector('[data-tab="' + tabName + '"]').classList.add('active');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Controls
 // ─────────────────────────────────────────────────────────────────────────────
 document.getElementById('nextBtn').onclick = function () {
+  stopAutomove();
   const game = pgnData[currentVar];
   if (currentMove < game.moves.length) {
     currentMove++;
     gotoMove();
   } else if (currentVar < pgnData.length - 1) {
     currentVar++;
-    currentMove = 0;
+    currentMove = getIgnoreMoves();
     gotoMove();
   }
 };
 
 document.getElementById('prevBtn').onclick = function () {
+  stopAutomove();
   if (currentMove > 0) {
     currentMove--;
     gotoMove();
@@ -468,20 +583,22 @@ document.getElementById('prevBtn').onclick = function () {
 };
 
 document.getElementById('nextGameBtn').onclick = function () {
+  stopAutomove();
   if (currentVar < pgnData.length - 1) {
     currentVar++;
-    currentMove = 0;
+    currentMove = getIgnoreMoves();
     gotoMove();
   }
 };
 
 document.getElementById('prevGameBtn').onclick = function () {
+  stopAutomove();
   if (currentMove > 0) {
-    currentMove = 0;
+    currentMove = getIgnoreMoves();
     gotoMove();
   } else if (currentVar > 0) {
     currentVar--;
-    currentMove = 0;
+    currentMove = getIgnoreMoves();
     gotoMove();
   }
 };
@@ -498,6 +615,10 @@ window.onload = function () {
   initArrowMarkers();
   buildGameList();
   gotoMove();
+  document.getElementById('automoveCheck').addEventListener('change', function() {
+    if (this.checked) startAutomove();
+    else stopAutomove();
+  });
 };
 </script>
 </body>
