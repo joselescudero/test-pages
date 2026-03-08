@@ -409,6 +409,8 @@ function gotoMove() {
     if (fromEl) fromEl.classList.add('highlight-square');
     if (toEl) toEl.classList.add('highlight-square');
   }
+  localStorage.setItem('pgn_var', currentVar);
+  localStorage.setItem('pgn_move', currentMove);
   updateMovesBox();
   if (currentMove > 0) drawOverlays(game.moves[currentMove - 1]);
   else clearOverlays();
@@ -619,6 +621,28 @@ window.onload = function () {
   });
   initArrowMarkers();
   buildGameList();
+
+  const savedVar = parseInt(localStorage.getItem('pgn_var'), 10);
+  const savedMove = parseInt(localStorage.getItem('pgn_move'), 10);
+  if (!isNaN(savedVar) && savedVar >= 0 && savedVar < pgnData.length) {
+    currentVar = savedVar;
+    if (!isNaN(savedMove) && savedMove >= 0 && savedMove <= pgnData[currentVar].moves.length) {
+      currentMove = savedMove;
+    }
+  }
+
+  // Load and persist config values
+  const automoveMsInput = document.getElementById('automoveMs');
+  const ignoreMovesInput = document.getElementById('ignoreMoves');
+
+  const savedAutomoveMs = localStorage.getItem('pgn_automoveMs');
+  if (savedAutomoveMs) automoveMsInput.value = savedAutomoveMs;
+  automoveMsInput.addEventListener('change', () => localStorage.setItem('pgn_automoveMs', automoveMsInput.value));
+
+  const savedIgnoreMoves = localStorage.getItem('pgn_ignoreMoves');
+  if (savedIgnoreMoves) ignoreMovesInput.value = savedIgnoreMoves;
+  ignoreMovesInput.addEventListener('change', () => localStorage.setItem('pgn_ignoreMoves', ignoreMovesInput.value));
+
   gotoMove();
   document.getElementById('automoveCheck').addEventListener('change', function() {
     if (this.checked) startAutomove();
