@@ -414,22 +414,22 @@ function gotoMove() {
   else clearOverlays();
 }
 
+function sanToSpanish(san) {
+  // Map English piece letters to Spanish
+  const pieceMap = { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' };
+  // Promotion: e8=Q, etc.
+  san = san.replace(/([=])([KQRBN])/, (m, eq, p) => eq + pieceMap[p]);
+  // Piece move: Qe4, Nf3, etc. (but not pawn moves like e4)
+  if (/^[KQRBN]/.test(san)) {
+    return pieceMap[san[0]] + san.slice(1);
+  }
+  return san;
+}
+
 function updateMovesBox() {
   const game = pgnData[currentVar];
   let html = '<b>Partida ' + (currentVar + 1) + ' / ' + pgnData.length + '</b><br>';
   let n = 1;
-  // Map English piece letters to Spanish
-  function sanToSpanish(san) {
-    // Only translate the first letter if it's a piece, not after translation
-    const pieceMap = { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' };
-    // Promotion: e8=Q, etc.
-    san = san.replace(/([=])([KQRBN])/, (m, eq, p) => eq + pieceMap[p]);
-    // Piece move: Qe4, Nf3, etc. (but not pawn moves like e4)
-    if (/^[KQRBN]/.test(san)) {
-      return pieceMap[san[0]] + san.slice(1);
-    }
-    return san;
-  }
   for (let i = 0; i < game.moves.length; i++) {
     if (i % 2 === 0) html += n++ + '. ';
     const san = sanToSpanish(game.moves[i].san);
@@ -461,15 +461,6 @@ function updateMovesBox() {
 function buildGameList() {
   const container = document.getElementById('gameList');
   container.innerHTML = '';
-  // Map English piece letters to Spanish
-  function sanToSpanish(san) {
-    const pieceMap = { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' };
-    san = san.replace(/([=])([KQRBN])/, (m, eq, p) => eq + pieceMap[p]);
-    if (/^[KQRBN]/.test(san)) {
-      return pieceMap[san[0]] + san.slice(1);
-    }
-    return san;
-  }
   pgnData.forEach((game, idx) => {
     const label = idx === 0 ? 'Línea principal' : 'Variante ' + idx;
     let movesHtml = '';
