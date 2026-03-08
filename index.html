@@ -26,6 +26,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 <script src="pgn-parser.js"></script>
+<script src="captured-pieces.js"></script>
 
 <style>
   *, *::before, *::after { box-sizing: border-box; }
@@ -171,6 +172,34 @@
     outline: 2px solid rgba(40, 15, 0, 0.55);
     outline-offset: -4px;
   }
+
+  #capturedPiecesBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 8px;
+    background: #e8e8e8;
+    min-height: 26px; /* To prevent layout shift */
+    align-self: center;
+    width: calc(100vw - 10px);
+    max-width: 600px;
+    box-sizing: border-box;
+  }
+  .captured-list {
+    display: flex;
+    gap: 2px;
+    flex-basis: 45%;
+    flex-wrap: wrap;
+  }
+  .captured-list img {
+    width: 18px;
+    height: 18px;
+  }
+  #material-difference {
+    font-size: 13px;
+    font-weight: bold;
+    color: #555;
+  }
 </style>
 </head>
 <body>
@@ -178,6 +207,12 @@
 <div id="boardContainer">
   <div id="board"></div>
   <svg id="arrowOverlay"><defs></defs></svg>
+</div>
+
+<div id="capturedPiecesBar">
+  <div id="captured-white-pieces" class="captured-list"></div>
+  <div id="material-difference"></div>
+  <div id="captured-black-pieces" class="captured-list"></div>
 </div>
 
 <div id="controls">
@@ -414,6 +449,7 @@ function gotoMove() {
   updateMovesBox();
   if (currentMove > 0) drawOverlays(game.moves[currentMove - 1]);
   else clearOverlays();
+  updateCapturedPieces(chess);
 }
 
 function sanToSpanish(san) {
