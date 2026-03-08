@@ -44,15 +44,20 @@
     overscroll-behavior-y: contain;
   }
 
+  #mainContent {
+    display: flex;
+    gap: 5px;
+    align-self: center;
+    width: calc(100vw - 10px);
+    max-width: 625px; /* 600px board + 20px bar + 5px gap */
+    margin-top: 5px;
+  }
+
   /* Board fills the full screen width with small margins */
   #boardContainer {
     position: relative;
-    width: calc(100vw - 10px);
-    height: calc(100vw - 10px);
-    max-width: 600px;
-    max-height: 600px;
-    align-self: center;
-    margin-top: 5px;
+    flex-grow: 1;
+    aspect-ratio: 1 / 1;
     flex-shrink: 0;
   }
 
@@ -182,7 +187,7 @@
     min-height: 26px; /* To prevent layout shift */
     align-self: center;
     width: calc(100vw - 10px);
-    max-width: 600px;
+    max-width: 625px;
     box-sizing: border-box;
   }
   .captured-list {
@@ -203,13 +208,51 @@
     font-weight: bold;
     color: #555;
   }
+
+  #evalBar {
+    width: 20px;
+    /* height is stretched by flexbox */
+    background-color: #333;
+    display: flex;
+    flex-direction: column-reverse; /* Black at bottom, white at top */
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid #555;
+    flex-shrink: 0;
+  }
+
+  #evalBar-white {
+    width: 100%;
+    background-color: #f0f0f0;
+    transition: height 0.3s ease;
+  }
+
+  #evalBar-black {
+    width: 100%;
+    background-color: #404040;
+    transition: height 0.3s ease;
+  }
+
+  #pvBox {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #3a6d3a;
+    font-style: italic;
+    line-height: 1.5;
+  }
 </style>
 </head>
 <body>
 
-<div id="boardContainer">
-  <div id="board"></div>
-  <svg id="arrowOverlay"><defs></defs></svg>
+<div id="mainContent">
+  <div id="evalBar">
+    <div id="evalBar-white"></div>
+    <div id="evalBar-black"></div>
+  </div>
+  <div id="boardContainer">
+    <div id="board"></div>
+    <svg id="arrowOverlay"><defs></defs></svg>
+  </div>
 </div>
 
 <div id="capturedPiecesBar">
@@ -327,7 +370,7 @@ if ('serviceWorker' in navigator) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Board state
 // ─────────────────────────────────────────────────────────────────────────────
-let board, chess;
+let board, chess, stockfish;
 let currentVar = 0, currentMove = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -453,6 +496,7 @@ function gotoMove() {
   if (currentMove > 0) drawOverlays(game.moves[currentMove - 1]);
   else clearOverlays();
   updateCapturedPieces(chess);
+  startAnalysis();
 }
 
 function sanToSpanish(san) {
@@ -479,6 +523,10 @@ function updateMovesBox() {
     } else {
       html += san + ' ';
     }
+  }
+  // Add placeholder for Principal Variation if at the end of the game
+  if (currentMove === game.moves.length) {
+    html += '<div id="pvBox"></div>';
   }
   document.getElementById('movesBox').innerHTML = html;
   // Show NAG description for current move
@@ -529,6 +577,68 @@ function buildGameList() {
     gotoMove();
     window.scrollTo(0, 0);
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stockfish Engine Analysis
+// ─────────────────────────────────────────────────────────────────────────────
+function onEngineMessage(event) {
+  const line = (event && typeof event === 'object' && event.data) ? event.data : event;
+  if (typeof line !== 'string') return;
+
+  if (line.startsWith('info depth')) {
+    const scoreMatch = line.match(/score (cp|mate) (-?\d+)/);
+    if (scoreMatch) {
+      const score = {
+        type: scoreMatch[1],
+        value: parseInt(scoreMatch[2], 10)
+      };
+      // Score is from the current player's perspective. Convert to white's perspective.
+      if (chess.turn() === 'b') {
+        score.value = -score.value;
+      }
+      updateEvalBar(score);
+
+      const pvMatch = line.match(/pv (.+)/);
+      if (pvMatch) {
+        const pv = pvMatch[1];
+        updatePvDisplay(pv);
+      }
+    }
+  }
+}
+
+function updateEvalBar(score) {
+  const whiteBar = document.getElementById('evalBar-white');
+  let whitePct = 50;
+
+  if (score.type === 'mate') {
+    whitePct = score.value > 0 ? 100 : 0;
+  } else {
+    // Sigmoid function to map centipawns to a percentage (0-100) from white's perspective
+    const advantage = 2 / (1 + Math.exp(-0.0035 * score.value)) - 1; // Range -1 to 1
+    whitePct = (1 + advantage) / 2 * 100;
+  }
+  whiteBar.style.height = whitePct + '%';
+}
+
+function updatePvDisplay(pvString) {
+  if (currentMove !== pgnData[currentVar].moves.length) return; // Only show PV at the end
+  const pvBox = document.getElementById('pvBox');
+  if (!pvBox) return;
+
+  const moves = pvString.split(' ').slice(0, 8); // Show first 8 moves of the PV
+  const translatedMoves = moves.map(sanToSpanish).join(' ');
+  pvBox.textContent = 'Mejor: ' + translatedMoves;
+}
+
+function startAnalysis() {
+  if (!stockfish) return;
+  stockfish.postMessage('stop');
+  stockfish.postMessage('position fen ' + chess.fen());
+  stockfish.postMessage('go depth 18');
+  const pvBox = document.getElementById('pvBox');
+  if (pvBox) pvBox.textContent = 'Analizando...';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -658,8 +768,24 @@ window.onload = function () {
     position: 'start',
     pieceTheme: 'https://raw.githubusercontent.com/oakmac/chessboardjs/master/website/img/chesspieces/wikipedia/{piece}.png'
   });
+
   initArrowMarkers();
   buildGameList();
+
+  // Initialize Stockfish via Blob Worker (bypasses CORS and global variable issues)
+  const stockfishUrl = 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js';
+  fetch(stockfishUrl)
+    .then(res => res.text())
+    .then(text => {
+      const blob = new Blob([text], { type: 'application/javascript' });
+      stockfish = new Worker(URL.createObjectURL(blob));
+      stockfish.onmessage = onEngineMessage;
+      startAnalysis();
+    })
+    .catch(e => {
+      console.warn('Stockfish init failed:', e);
+    document.getElementById('evalBar').style.display = 'none';
+    });
 
   const savedVar = parseInt(localStorage.getItem('pgn_var'), 10);
   const savedMove = parseInt(localStorage.getItem('pgn_move'), 10);
