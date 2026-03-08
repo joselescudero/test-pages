@@ -143,14 +143,13 @@
     padding: 6px 10px;
   }
 
-  .game-entry { padding: 4px 0; border-bottom: 1px solid #eee; }
+  .game-entry { padding: 2px 0; border-bottom: 1px solid #eee; }
   .game-entry:last-child { border-bottom: none; }
   .game-entry .game-label {
     font-weight: bold;
     cursor: pointer;
     color: #003080;
     display: block;
-    padding: 2px 0;
   }
   .game-entry .game-moves { color: #555; word-break: break-word; font-size: 12px; }
 
@@ -351,12 +350,15 @@ const rawPGN2 = `
 // ─────────────────────────────────────────────────────────────────────────────
 // Parse all games and sort alphabetically by moves string
 // ─────────────────────────────────────────────────────────────────────────────
-let pgnData = parsePGN(rawPGN);
+let pgnData;
 // Helper to get moves as a string (for sorting)
 function movesString(game) {
   return game.moves.map(m => m.san).join(' ');
 }
-pgnData = pgnData.slice().sort((a, b) => movesString(a).localeCompare(movesString(b)));
+const allGames = parsePGN(rawPGN);
+const mainLineGame = allGames[0];
+const variantGames = allGames.slice(1).sort((a, b) => movesString(a).localeCompare(movesString(b)));
+pgnData = [mainLineGame, ...variantGames];
 console.log('Total games (main + variants):', pgnData.length);
 pgnData.forEach((g, i) => console.log('Game', i + 1, ':', g.moves.map(m => m.san).join(' ')));
 
@@ -563,7 +565,7 @@ function buildGameList() {
     div.className = 'game-entry';
     div.innerHTML =
       '<span class="game-label" data-idx="' + idx + '">&#9654; Partida ' + (idx + 1) +
-      ' &ndash; ' + label + ' (' + game.moves.length + ' jugadas)</span><br>' +
+      ' &ndash; ' + label + ' (' + game.moves.length + ' jugadas)</span>' +
       '<span class="game-moves">' + movesHtml.trim() + '</span>';
     container.appendChild(div);
   });
@@ -599,7 +601,8 @@ function onEngineMessage(event) {
       }
       updateEvalBar(score);
 
-      const pvMatch = line.match(/pv (.+)/);
+      // Match " pv " with a leading space to avoid matching "multipv"
+      const pvMatch = line.match(/ pv (.+)/);
       if (pvMatch) {
         const pv = pvMatch[1];
         updatePvDisplay(pv);
@@ -627,16 +630,29 @@ function updatePvDisplay(pvString) {
   const pvBox = document.getElementById('pvBox');
   if (!pvBox) return;
 
-  const moves = pvString.split(' ').slice(0, 8); // Show first 8 moves of the PV
-  const translatedMoves = moves.map(sanToSpanish).join(' ');
-  pvBox.textContent = 'Mejor: ' + translatedMoves;
+  // Stockfish sends moves in coordinate notation (e.g. "e2e4").
+  // We need to convert them to SAN (e.g. "e4") using a temporary chess instance.
+  const uciMoves = pvString.split(' ').slice(0, 8);
+  const tempChess = new Chess(chess.fen());
+  const sanMoves = [];
+
+  for (const uci of uciMoves) {
+    const from = uci.substring(0, 2);
+    const to = uci.substring(2, 4);
+    const promotion = uci.length > 4 ? uci.substring(4, 5) : undefined;
+
+    const move = tempChess.move({ from, to, promotion });
+    if (move) sanMoves.push(sanToSpanish(move.san));
+    else break;
+  }
+  pvBox.textContent = 'Mejor: ' + sanMoves.join(' ');
 }
 
 function startAnalysis() {
   if (!stockfish) return;
   stockfish.postMessage('stop');
   stockfish.postMessage('position fen ' + chess.fen());
-  stockfish.postMessage('go depth 18');
+  stockfish.postMessage('go movetime 2000');
   const pvBox = document.getElementById('pvBox');
   if (pvBox) pvBox.textContent = 'Analizando...';
 }
