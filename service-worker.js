@@ -5,10 +5,12 @@ const FILES_TO_CACHE = [
   BASE_PATH + '/',
   BASE_PATH + '/index.html',
   BASE_PATH + '/manifest.json',
-  BASE_PATH + '/pgn-parser.js',
-  BASE_PATH + '/icon-192.png',
-  BASE_PATH + '/icon-512.png',
-  // Add more files if needed
+  BASE_PATH + '/css/style.css',
+  BASE_PATH + '/js/main.js',
+  BASE_PATH + '/js/pgn-parser.js',
+  BASE_PATH + '/js/captured-pieces.js',
+  BASE_PATH + '/img/icon-192.png',
+  BASE_PATH + '/img/icon-512.png',
 ];
 
 self.addEventListener('install', event => {
