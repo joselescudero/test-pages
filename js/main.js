@@ -15,6 +15,8 @@ let pgnData = []; // Holds all games (main + variants) from the loaded PGN
 let rawPgnGames = []; // Holds the original, unsorted games from the parser
 let currentVar = 0, currentMove = 0;
 let automoveTimer = null;
+let savedVariants = [];
+let listModeActive = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PGN Loading and Processing
@@ -44,6 +46,7 @@ function buildPgnSelectionList() {
       const pgnName = e.target.dataset.pgnName;
       localStorage.setItem('selected_pgn', pgnName);
       loadPgnByName(pgnName);
+      // The user is now automatically switched to the board after selecting a PGN
       switchTab('tablero');
     }
   });
@@ -261,6 +264,8 @@ function gotoMove() {
   if (currentMove > 0) drawOverlays(game.moves[currentMove - 1]);
   else clearOverlays();
   updateCapturedPieces(chess);
+  // Update the save button icon based on the current variant
+  updateSaveButtonState();
   startAnalysis();
 }
 
@@ -312,6 +317,11 @@ function buildGameList() {
   if (!pgnData || pgnData.length === 0) return;
 
   pgnData.forEach((game, idx) => {
+    const div = document.createElement('div');
+    div.className = 'game-entry';
+    if (savedVariants.includes(idx)) {
+        div.classList.add('saved-variant');
+    }
     const label = (document.getElementById('mainLineFirstCheck').checked && idx === 0) ? 'Línea principal' : `Variante`;
     let movesHtml = '';
     let n = 1;
@@ -320,8 +330,6 @@ function buildGameList() {
       movesHtml += sanToSpanish(m.san) + ' ';
     });
 
-    const div = document.createElement('div');
-    div.className = 'game-entry';
     div.innerHTML =
       `<span class="game-label" data-idx="${idx}">&#9654; Partida ${idx + 1} &ndash; ${label} (${game.moves.length} jugadas)</span>` +
       `<span class="game-moves">${movesHtml.trim()}</span>`;
@@ -477,6 +485,55 @@ function switchTab(tabName) {
   if (button) button.classList.add('active');
 }
 
+function updateSaveButtonState() {
+    const btn = document.getElementById('saveVariantBtn');
+    if (!pgnData || pgnData.length === 0) {
+        btn.innerHTML = '💾';
+        btn.style.opacity = 0.5;
+        return;
+    }
+    btn.style.opacity = 1;
+    const isSaved = savedVariants.includes(currentVar);
+    btn.innerHTML = isSaved ? '🗑️' : '💾';
+    btn.title = isSaved ? 'Quitar Variante' : 'Guardar Variante';
+}
+
+function handleSaveVariant() {
+    if (!pgnData || pgnData.length === 0) return;
+
+    const isSaved = savedVariants.includes(currentVar);
+    if (isSaved) {
+        if (confirm('¿Quieres eliminar esta variante de la lista de guardadas?')) {
+            savedVariants = savedVariants.filter(v => v !== currentVar);
+            localStorage.setItem('pgn_savedVariants', JSON.stringify(savedVariants));
+            console.log('Variant removed:', currentVar);
+            // If we were in list mode and removed the last item, exit list mode
+            if (listModeActive && savedVariants.length === 0) {
+                toggleListMode();
+            }
+        }
+    } else {
+        if (confirm('¿Quieres guardar esta variante?')) {
+            savedVariants.push(currentVar);
+            savedVariants.sort((a, b) => a - b); // Keep it sorted
+            localStorage.setItem('pgn_savedVariants', JSON.stringify(savedVariants));
+            console.log('Variant saved:', currentVar);
+        }
+    }
+    updateSaveButtonState();
+    buildGameList(); // Rebuild to show/hide star
+}
+
+function toggleListMode() {
+    if (savedVariants.length === 0 && !listModeActive) {
+        alert("No hay variantes guardadas para entrar en modo lista.");
+        return;
+    }
+    listModeActive = !listModeActive;
+    document.getElementById('listModeBtn').classList.toggle('active', listModeActive);
+    console.log('List mode active:', listModeActive);
+}
+
 function setupEventListeners() {
   document.getElementById('nextBtn').onclick = () => {
     stopAutomove();
@@ -505,21 +562,51 @@ function setupEventListeners() {
 
   document.getElementById('nextGameBtn').onclick = () => {
     stopAutomove();
-    if (currentVar < pgnData.length - 1) {
-      currentVar++;
-      currentMove = startMove();
-      gotoMove();
+    if (listModeActive) {
+        if (savedVariants.length === 0) return;
+        const currentIndexInSaved = savedVariants.indexOf(currentVar);
+        let nextIndex;
+        if (currentIndexInSaved === -1 || currentIndexInSaved === savedVariants.length - 1) {
+            nextIndex = 0; // Loop to start
+        } else {
+            nextIndex = currentIndexInSaved + 1;
+        }
+        currentVar = savedVariants[nextIndex];
+        currentMove = startMove();
+        gotoMove();
+    } else {
+        // Original logic
+        if (currentVar < pgnData.length - 1) {
+            currentVar++;
+            currentMove = startMove();
+            gotoMove();
+        }
     }
   };
 
   document.getElementById('prevGameBtn').onclick = () => {
     stopAutomove();
     const ignore = startMove();
-    if (currentMove > ignore) {
-      currentMove = ignore;
-    } else if (currentVar > 0) {
-      currentVar--;
-      currentMove = startMove();
+    if (listModeActive) {
+        if (savedVariants.length === 0) return;
+        const currentIndexInSaved = savedVariants.indexOf(currentVar);
+        let prevIndex;
+        if (currentIndexInSaved === -1 || currentIndexInSaved === 0) {
+            prevIndex = savedVariants.length - 1; // Loop to end
+        } else {
+            prevIndex = currentIndexInSaved - 1;
+        }
+        currentVar = savedVariants[prevIndex];
+        currentMove = startMove();
+        gotoMove();
+    } else {
+        // Original logic
+        if (currentMove > ignore) {
+            currentMove = ignore;
+        } else if (currentVar > 0) {
+            currentVar--;
+            currentMove = startMove();
+        }
     }
     gotoMove();
   };
@@ -531,6 +618,7 @@ function setupEventListeners() {
     currentVar  = parseInt(t.dataset.idx, 10);
     currentMove = startMove();
     gotoMove();
+    switchTab('tablero');
     window.scrollTo(0, 0);
   });
 
@@ -540,6 +628,9 @@ function setupEventListeners() {
       if (tabName) switchTab(tabName);
     }
   });
+
+  document.getElementById('saveVariantBtn').addEventListener('click', handleSaveVariant);
+  document.getElementById('listModeBtn').addEventListener('click', toggleListMode);
 
   const mainLineFirstCheck = document.getElementById('mainLineFirstCheck');
   const automoveMsInput = document.getElementById('automoveMs');
@@ -584,6 +675,8 @@ window.onload = function () {
   initStockfish();
   setupEventListeners();
   registerServiceWorker();
+  
+  savedVariants = JSON.parse(localStorage.getItem('pgn_savedVariants')) || [];
   
   buildPgnSelectionList();
 

@@ -114,6 +114,21 @@ body {
 /* Adjust tab pane padding as centering is now handled by children margins */
 .tab-pane { padding: 8px 0; }
 
+/* Style for the active list mode button */
+#listModeBtn.active {
+  background-color: #e0e8f0;
+  color: #003080;
+}
+
+.game-entry.saved-variant .game-label::before {
+    content: '⭐';
+    font-size: 11px;
+    margin-right: 4px;
+}
+.game-entry.saved-variant .game-label {
+    color: #c8a000; /* A gold-ish color */
+}
+
 .game-entry { padding: 2px 0; border-bottom: 1px solid #eee; }
 .game-entry:last-child { border-bottom: none; }
 .game-entry .game-label {
@@ -225,6 +240,7 @@ body {
   border-radius: 6px;
   cursor: pointer;
   text-align: left;
+  text-align: center;
 }
 #pgnList button:hover {
   background-color: #f0f0f0;
