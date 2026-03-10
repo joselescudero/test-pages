@@ -312,7 +312,7 @@ function buildGameList() {
   if (!pgnData || pgnData.length === 0) return;
 
   pgnData.forEach((game, idx) => {
-    const label = idx === 0 ? 'Línea principal' : `Variante ${idx}`;
+    const label = (document.getElementById('mainLineFirstCheck').checked && idx === 0) ? 'Línea principal' : `Variante`;
     let movesHtml = '';
     let n = 1;
     game.moves.forEach((m, i) => {

@@ -16,9 +16,11 @@ body {
 #mainContent {
   display: flex;
   gap: 5px;
-  width: 100%;
+  /* Center the block and set a max width */
+  margin: 5px auto 0 auto;
   max-width: 625px; /* 600px board + 20px bar + 5px gap */
-  margin-top: 5px;
+  /* Ensure it doesn't overflow on small screens */
+  width: 100%;
 }
 
 /* Board fills the full screen width with small margins */
@@ -56,11 +58,13 @@ body {
   padding: 8px 8px 0;
 }
 
-/* Set a consistent width for controls and text boxes */
-#controls, #movesBox, #nagBox {
-  width: 100%;
-  max-width: 625px;
-  box-sizing: border-box;
+/* Center the main blocks of content within tabs */
+#controls, #movesBox, #nagBox, #capturedPiecesBar, #gameList, .config-row, #pgnList ul {
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 625px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 #controls button {
@@ -107,27 +111,8 @@ body {
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 .tab-btn.active { color: #003080; border-bottom: 2px solid #003080; background: #fff; }
-/* Restore flex layout for tab content */
-.tab-pane {
-  padding: 8px;
-  /* Make tab content a flex column that centers its children */
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px; /* Consistent spacing between elements */
-}
-
-#gameList {
-  font-size: 13px;
-  line-height: 1.7;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 6px 10px;
-  width: 100%;
-  max-width: 625px;
-  box-sizing: border-box;
-}
+/* Adjust tab pane padding as centering is now handled by children margins */
+.tab-pane { padding: 8px 0; }
 
 .game-entry { padding: 2px 0; border-bottom: 1px solid #eee; }
 .game-entry:last-child { border-bottom: none; }
@@ -142,10 +127,7 @@ body {
 /* Config tab */
 .config-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 4px; border-bottom: 1px solid #eee;
-  width: 100%;
-  max-width: 625px;
-  box-sizing: border-box;
+  padding: 10px 8px; border-bottom: 1px solid #eee;
 }
 .config-row:last-child { border-bottom: none; }
 .config-label { font-size: 14px; color: #333; display: flex; align-items: center; gap: 8px; }
@@ -172,10 +154,7 @@ body {
   justify-content: space-between;
   padding: 2px 8px;
   background: #f0f0f0;
-  min-height: 26px; /* To prevent layout shift */
-  width: 100%;
-  max-width: 625px;
-  box-sizing: border-box;
+  min-height: 26px;
 }
 .captured-list {
   display: flex;
@@ -236,9 +215,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 100%;
-  max-width: 625px;
-  box-sizing: border-box;
 }
 #pgnList button {
   width: 100%;
