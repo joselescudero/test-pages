@@ -5,7 +5,7 @@ const PGN_SOURCES = {
   'Apertura del Alfil': 'apertura_alfil',
   'Variantes Ruy Lopez': '2-variantes'
 };
-const PGN_BASE_URL = 'https://joselescudero.github.io/test-pages/';
+const PGN_BASE_URL = 'https://joselescudero.github.io/test-pages/pgn/';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Global state
@@ -17,6 +17,7 @@ let currentVar = 0, currentMove = 0;
 let automoveTimer = null;
 let savedVariants = [];
 let listModeActive = false;
+let lastDisplayedPvDepth = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PGN Loading and Processing
@@ -41,11 +42,16 @@ function buildPgnSelectionList() {
   }
   container.appendChild(ul);
 
-  container.addEventListener('click', (e) => {
+  container.addEventListener('click', async (e) => {
     if (e.target.matches('button')) {
       const pgnName = e.target.dataset.pgnName;
       localStorage.setItem('selected_pgn', pgnName);
-      loadPgnByName(pgnName);
+      const success = await loadPgnByName(pgnName);
+      if (success) {
+        currentVar = 0;
+        currentMove = startMove();
+        gotoMove();
+      }
       // The user is now automatically switched to the board after selecting a PGN
       switchTab('tablero');
     }
@@ -62,17 +68,29 @@ async function loadPgnByName(pgnName) {
   try {
     document.getElementById('gameList').innerHTML = 'Cargando PGN...';
     document.getElementById('movesBox').innerHTML = 'Cargando...';
+
+    // Before fetching, reset current state
+    listModeActive = false;
+    document.getElementById('listModeBtn').classList.remove('active');
+    savedVariants = [];
+
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const rawPGN = await response.text();
+
+    // After a successful load, update the saved variants list for this PGN
+    const key = getSavedVariantsKey();
+    savedVariants = key ? JSON.parse(localStorage.getItem(key)) || [] : [];
     processPgnData(rawPGN);
+    return true;
   } catch (error) {
     console.error('Failed to load PGN:', error);
     document.getElementById('gameList').innerHTML = `<span style="color:red;">Error al cargar ${pgnName}.pgn</span>`;
     pgnData = [];
     resetBoardToInitialState();
+    return false;
   }
 }
 
@@ -85,11 +103,6 @@ function processPgnData(rawPGN) {
   console.log('Total games (main + variants):', rawPgnGames.length);
 
   applyGameSorting();
-  
-  // After loading a new PGN, always reset to the first game in the list
-  currentVar = 0;
-  currentMove = startMove();
-  gotoMove();
 }
 
 /**
@@ -132,6 +145,7 @@ function resetBoardToInitialState() {
     clearOverlays();
     if (chess) updateCapturedPieces(chess);
     updateEvalBar({ type: 'cp', value: 0 });
+    updateSaveButtonState();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -345,20 +359,32 @@ function onEngineMessage(event) {
   if (typeof line !== 'string') return;
 
   if (line.startsWith('info depth')) {
+    const depthMatch = line.match(/info depth (\d+)/);
+    const currentDepth = depthMatch ? parseInt(depthMatch[1], 10) : 0;
+
     const scoreMatch = line.match(/score (cp|mate) (-?\d+)/);
     if (scoreMatch) {
       const score = {
         type: scoreMatch[1],
         value: parseInt(scoreMatch[2], 10)
       };
-      if (chess.turn() === 'b') {
+
+      // If the game is decisively over, use the game state, not the engine score value.
+      if (chess.in_checkmate()) {
+          // chess.turn() is the player who is mated.
+          score.type = 'mate';
+          // Use a large number to ensure updateEvalBar reads it as a win/loss
+          score.value = chess.turn() === 'b' ? Infinity : -Infinity;
+      } else if (chess.turn() === 'b') {
+        // For any score type, if it's black's turn, the score is from black's perspective.
+        // We negate it to get white's perspective.
         score.value = -score.value;
       }
       updateEvalBar(score);
 
       const pvMatch = line.match(/ pv (.+)/);
       if (pvMatch) {
-        updatePvDisplay(pvMatch[1]);
+        updatePvDisplay(pvMatch[1], currentDepth);
       }
     }
   }
@@ -377,8 +403,18 @@ function updateEvalBar(score) {
   whiteBar.style.height = `${whitePct}%`;
 }
 
-function updatePvDisplay(pvString) {
-  if (!pgnData || pgnData.length === 0 || currentMove !== pgnData[currentVar].moves.length) return;
+function updatePvDisplay(pvString, depth) {
+  if (currentMove !== pgnData[currentVar]?.moves.length) {
+    lastDisplayedPvDepth = 0; // Reset for next time
+    return;
+  }
+  // Don't update display with a result from a shallower search, which can happen
+  // if a new search starts or the engine reports intermediate results.
+  if (depth < lastDisplayedPvDepth) {
+    return;
+  }
+  lastDisplayedPvDepth = depth;
+
   const pvBox = document.getElementById('pvBox');
   if (!pvBox) return;
 
@@ -396,6 +432,7 @@ function updatePvDisplay(pvString) {
 
 function startAnalysis() {
   if (!stockfish) return;
+  lastDisplayedPvDepth = 0; // Reset for new analysis
   stockfish.postMessage('stop');
   stockfish.postMessage('position fen ' + chess.fen());
   stockfish.postMessage('go movetime 2000');
@@ -485,11 +522,18 @@ function switchTab(tabName) {
   if (button) button.classList.add('active');
 }
 
+function getSavedVariantsKey() {
+    const pgnName = localStorage.getItem('selected_pgn');
+    if (!pgnName) return null;
+    return `pgn_savedVariants_${pgnName}`;
+}
+
 function updateSaveButtonState() {
     const btn = document.getElementById('saveVariantBtn');
     if (!pgnData || pgnData.length === 0) {
         btn.innerHTML = '💾';
         btn.style.opacity = 0.5;
+        btn.title = 'Guardar Variante';
         return;
     }
     btn.style.opacity = 1;
@@ -505,7 +549,8 @@ function handleSaveVariant() {
     if (isSaved) {
         if (confirm('¿Quieres eliminar esta variante de la lista de guardadas?')) {
             savedVariants = savedVariants.filter(v => v !== currentVar);
-            localStorage.setItem('pgn_savedVariants', JSON.stringify(savedVariants));
+            const key = getSavedVariantsKey();
+            if (key) localStorage.setItem(key, JSON.stringify(savedVariants));
             console.log('Variant removed:', currentVar);
             // If we were in list mode and removed the last item, exit list mode
             if (listModeActive && savedVariants.length === 0) {
@@ -516,7 +561,8 @@ function handleSaveVariant() {
         if (confirm('¿Quieres guardar esta variante?')) {
             savedVariants.push(currentVar);
             savedVariants.sort((a, b) => a - b); // Keep it sorted
-            localStorage.setItem('pgn_savedVariants', JSON.stringify(savedVariants));
+            const key = getSavedVariantsKey();
+            if (key) localStorage.setItem(key, JSON.stringify(savedVariants));
             console.log('Variant saved:', currentVar);
         }
     }
@@ -664,7 +710,7 @@ function setupEventListeners() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Init
 // ─────────────────────────────────────────────────────────────────────────────
-window.onload = function () {
+window.onload = async function () {
   chess = new Chess();
   board = Chessboard('board', {
     position: 'start',
@@ -676,7 +722,9 @@ window.onload = function () {
   setupEventListeners();
   registerServiceWorker();
   
-  savedVariants = JSON.parse(localStorage.getItem('pgn_savedVariants')) || [];
+  // Load saved variants for the initially selected PGN
+  const initialKey = getSavedVariantsKey();
+  savedVariants = initialKey ? JSON.parse(localStorage.getItem(initialKey)) || [] : [];
   
   buildPgnSelectionList();
 
@@ -688,17 +736,19 @@ window.onload = function () {
     const savedMove = parseInt(localStorage.getItem('pgn_move'), 10);
     
     // Load the PGN and then apply the saved position
-    loadPgnByName(savedPgn).then(() => {
-        if (pgnData.length > 0) {
-            if (!isNaN(savedVar) && savedVar >= 0 && savedVar < pgnData.length) {
-                currentVar = savedVar;
-                if (!isNaN(savedMove) && savedMove >= 0 && savedMove <= pgnData[currentVar].moves.length) {
-                    currentMove = savedMove;
-                }
+    const success = await loadPgnByName(savedPgn);
+    if (success) {
+        if (!isNaN(savedVar) && savedVar >= 0 && savedVar < pgnData.length) {
+            currentVar = savedVar;
+            if (!isNaN(savedMove) && savedMove >= 0 && savedMove <= pgnData[currentVar].moves.length) {
+                currentMove = savedMove;
             }
-            gotoMove();
+        } else {
+            currentVar = 0;
+            currentMove = startMove();
         }
-    });
+        gotoMove();
+    }
   } else {
     resetBoardToInitialState();
   }
