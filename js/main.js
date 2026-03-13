@@ -707,6 +707,75 @@ function setupEventListeners() {
   });
 }
 
+function initVariosMenu() {
+  // 1. Mover (ocultar) la opcion original Partidas
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  let gamesTabBtn = null;
+  // Intentamos buscar por texto
+  for (const btn of tabBtns) {
+    if (btn.textContent.trim().includes('Partidas')) {
+      gamesTabBtn = btn;
+      break;
+    }
+  }
+  // Fallback: si no la encuentra por texto, usa la 3a (índice 2)
+  if (!gamesTabBtn && tabBtns.length > 2) gamesTabBtn = tabBtns[2];
+  
+  if (gamesTabBtn) gamesTabBtn.style.display = 'none';
+
+  // 2. Crear boton y menu Varios
+  const saveBtn = document.getElementById('saveVariantBtn');
+  if (!saveBtn) return;
+
+  const wrapper = document.createElement('div');
+  wrapper.style.display = 'inline-block';
+  wrapper.style.position = 'relative';
+  wrapper.style.flex = '1';
+
+  const menuBtn = document.createElement('button');
+  menuBtn.innerHTML = '⚙️';
+  menuBtn.className = saveBtn.className; // Heredar estilo del boton save
+  menuBtn.style.cursor = 'pointer';
+  menuBtn.style.width = '100%';
+
+  const dropdown = document.createElement('div');
+  Object.assign(dropdown.style, {
+    display: 'none', position: 'absolute', top: '100%', left: '0',
+    backgroundColor: '#fff', color: '#000', border: '1px solid #ccc',
+    zIndex: '1000', minWidth: '110px', boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+    borderRadius: '4px', marginTop: '2px', textAlign: 'left'
+  });
+
+  const addItem = (text, onClick) => {
+    const item = document.createElement('div');
+    item.textContent = text;
+    Object.assign(item.style, { padding: '8px 12px', cursor: 'pointer' });
+    item.onmouseover = () => item.style.backgroundColor = '#eee';
+    item.onmouseout = () => item.style.backgroundColor = '#fff';
+    item.onclick = (e) => { onClick(); dropdown.style.display = 'none'; };
+    dropdown.appendChild(item);
+  };
+
+  addItem('Partidas', () => { if (gamesTabBtn) gamesTabBtn.click(); });
+  addItem('Lichess', () => {
+    let url;
+    if (pgnData && pgnData[currentVar]) {
+      const pgn = gameToString(pgnData[currentVar]);
+      url = 'https://lichess.org/analysis/pgn/' + encodeURIComponent(pgn) + '#' + currentMove;
+    } else {
+      url = 'https://lichess.org/analysis/' + chess.fen().replace(/ /g, '_');
+    }
+    window.open(url, '_blank');
+  });
+
+  menuBtn.onclick = (e) => { e.stopPropagation(); dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block'; };
+  window.addEventListener('click', () => dropdown.style.display = 'none');
+
+  wrapper.appendChild(menuBtn);
+  wrapper.appendChild(dropdown);
+  saveBtn.parentNode.insertBefore(wrapper, saveBtn.nextSibling);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Init
 // ─────────────────────────────────────────────────────────────────────────────
@@ -720,6 +789,7 @@ window.onload = async function () {
   initArrowMarkers();
   initStockfish();
   setupEventListeners();
+  initVariosMenu();
   registerServiceWorker();
   
   // Load saved variants for the initially selected PGN
