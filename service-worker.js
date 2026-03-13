@@ -1,5 +1,6 @@
 // Service Worker for offline support
 const CACHE_NAME = 'test-pages-cache-v1';
+const CACHE_NAME = 'test-pages-cache-v2';
 const BASE_PATH = '/test-pages';
 const FILES_TO_CACHE = [
   BASE_PATH + '/',
@@ -17,6 +18,10 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
       return cache.addAll(FILES_TO_CACHE);
+      return cache.addAll(FILES_TO_CACHE).catch(err => {
+        console.error('Falló el caché de archivos. Verifica que todos los archivos existan:', err);
+        throw err;
+      });
     })
   );
   self.skipWaiting();
