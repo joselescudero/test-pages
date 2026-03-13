@@ -192,11 +192,19 @@ function clearOverlays() {
 
 function squareCenter(sq, squareSize) {
   const file = sq.charCodeAt(0) - 97;
-  const rank = 8 - parseInt(sq[1], 10);
-  return {
-    x: file * squareSize + squareSize / 2,
-    y: rank * squareSize + squareSize / 2
-  };
+  const rank = parseInt(sq[1], 10) - 1; // 0-based rank (0..7)
+
+  if (board && board.orientation() === 'black') {
+    return {
+      x: (7 - file) * squareSize + squareSize / 2,
+      y: rank * squareSize + squareSize / 2
+    };
+  } else {
+    return {
+      x: file * squareSize + squareSize / 2,
+      y: (7 - rank) * squareSize + squareSize / 2
+    };
+  }
 }
 
 function drawOverlays(moveData) {
@@ -757,6 +765,7 @@ function initVariosMenu() {
   };
 
   addItem('Partidas', () => { if (gamesTabBtn) gamesTabBtn.click(); });
+
   addItem('Lichess', () => {
     let url;
     if (pgnData && pgnData[currentVar]) {
@@ -766,6 +775,20 @@ function initVariosMenu() {
       url = 'https://lichess.org/analysis/' + chess.fen().replace(/ /g, '_');
     }
     window.open(url, '_blank');
+  });
+
+  addItem('Girar Tablero', () => {
+    board.flip();
+    // Redibujar flechas/círculos en la nueva orientación
+    const game = pgnData[currentVar];
+    const moveData = (game && currentMove > 0) ? game.moves[currentMove - 1] : null;
+    // Pequeño timeout para asegurar que el tablero ha actualizado su estado interno antes de dibujar
+    setTimeout(() => drawOverlays(moveData), 50);
+  });
+
+  addItem('Copiar FEN', () => {
+    navigator.clipboard.writeText(chess.fen())
+      .then(() => alert('Posición (FEN) copiada al portapapeles.'));
   });
 
   menuBtn.onclick = (e) => { e.stopPropagation(); dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block'; };
