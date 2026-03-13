@@ -741,14 +741,14 @@ function initVariosMenu() {
   wrapper.style.flex = '1';
 
   const menuBtn = document.createElement('button');
-  menuBtn.innerHTML = '⚙️';
+  menuBtn.innerHTML = '☰';
   menuBtn.className = saveBtn.className; // Heredar estilo del boton save
   menuBtn.style.cursor = 'pointer';
   menuBtn.style.width = '100%';
 
   const dropdown = document.createElement('div');
   Object.assign(dropdown.style, {
-    display: 'none', position: 'absolute', top: '100%', left: '0',
+    display: 'none', position: 'absolute', top: '100%', right: '0', left: 'auto',
     backgroundColor: '#fff', color: '#000', border: '1px solid #ccc',
     zIndex: '1000', minWidth: '110px', boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
     borderRadius: '4px', marginTop: '2px', textAlign: 'left'
