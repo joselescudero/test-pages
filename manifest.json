@@ -1,6 +1,6 @@
 {
-  "name": "PGN Viewer",
-  "short_name": "PGN Viewer",
+  "name": "PGN Viewer T2",
+  "short_name": "PGN Viewer T2",
   "start_url": "/test-pages/",
   "scope": "/test-pages/",
   "display": "standalone",
