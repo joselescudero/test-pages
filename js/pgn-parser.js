@@ -211,12 +211,22 @@ function parseVariantLine(tokens, pos, ancestorMoves, allGames) {
  */
 function parsePGN(pgn) {
   const tokens = tokenizePGN(pgn);
-  const allGames = []; // will hold variants
+  const allGames = [];
   const pos = { i: 0 };
-  const mainMoves = parseVariantLine(tokens, pos, [], allGames);
 
-  // Main line first, then variants in discovery order
-  return [{ moves: mainMoves }, ...allGames];
+  while (pos.i < tokens.length) {
+    const gameVariants = [];
+    // Extrae la línea principal de la partida actual; parseVariantLine se detiene al ver un resultado (*)
+    const mainMoves = parseVariantLine(tokens, pos, [], gameVariants);
+
+    // Si se encontraron movimientos, guardamos la partida y sus variantes
+    if (mainMoves.length > 0 || gameVariants.length > 0) {
+      allGames.push({ moves: mainMoves });
+      allGames.push(...gameVariants);
+    }
+  }
+
+  return allGames;
 }
 
 /**

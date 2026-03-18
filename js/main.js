@@ -14,11 +14,13 @@ let board, chess, stockfish;
 let pgnData = []; // Holds all games (main + variants) from the loaded PGN
 let rawPgnGames = []; // Holds the original, unsorted games from the parser
 const CUSTOM_PGNS_KEY = 'pgn_custom_sources';
+const LICHESS_API_TOKEN_KEY = 'lichess_api_token';
 let currentVar = 0, currentMove = 0;
 let automoveTimer = null;
 let savedVariants = [];
 let listModeActive = false;
 let lastDisplayedPvDepth = 0;
+let isLoading = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PGN Loading and Processing
@@ -127,11 +129,80 @@ async function loadPgnByName(pgnName) {
 }
 
 /**
+ * Fetches the raw text of a PGN file, handling Lichess private studies and CORS.
+ * @param {string} url The URL of the PGN file.
+ * @returns {Promise<string>} The raw PGN text.
+ */
+async function fetchPgnText(url) {
+    const isLichess = url.includes('lichess.org');
+    let token = localStorage.getItem(LICHESS_API_TOKEN_KEY);
+    
+    const getOptions = (authToken) => {
+        const headers = {};
+        if (isLichess) {
+            headers['Accept'] = 'application/x-chess-pgn';
+            if (authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+        }
+        return { headers };
+    };
+
+    // --- 1. First attempt (direct, with token if available) ---
+    try {
+        const response = await fetch(url, getOptions(token));
+        if (response.ok) {
+            return await response.text();
+        }
+
+        // --- 2. Handle Lichess private study error ---
+        if (isLichess && (response.status === 401 || response.status === 404)) {
+            const newToken = prompt(
+                'Este estudio de Lichess es privado o no se encontró.\n\n' +
+                'Si es un estudio privado, introduce tu "Personal API access token" de Lichess para acceder.\n' +
+                'Puedes crearlo aquí: https://lichess.org/account/oauth/token/create\n\n' +
+                'Asegúrate de que el token tenga el permiso "Read your studies".',
+                token || ''
+            );
+
+            if (newToken && newToken.trim() !== '') {
+                localStorage.setItem(LICHESS_API_TOKEN_KEY, newToken);
+                const retryResponse = await fetch(url, getOptions(newToken));
+                if (retryResponse.ok) return await retryResponse.text();
+                
+                alert(`El token proporcionado no funcionó (Error: ${retryResponse.status}). No se pudo cargar el PGN.`);
+                throw new Error(`Lichess auth failed with new token: ${retryResponse.status}`);
+            } else {
+                throw new Error('Acceso a Lichess cancelado por el usuario.');
+            }
+        }
+        
+        throw new Error(`La carga directa falló con estado: ${response.status}`);
+
+    } catch (err) {
+        // --- 3. Fallback to CORS proxy ---
+        if (err.message.includes('Lichess auth failed') || err.message.includes('cancelado por el usuario')) {
+            throw err; // Re-throw specific user/auth errors to be displayed.
+        }
+
+        console.warn('Fallo la carga directa, intentando vía proxy CORS...', err.message);
+        if (!url.startsWith('http')) throw err; // Can't proxy non-http URLs
+        const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+        const proxyResponse = await fetch(proxyUrl);
+        if (!proxyResponse.ok) throw new Error(`El proxy CORS también falló con estado: ${proxyResponse.status}`);
+        return await proxyResponse.text();
+    }
+}
+
+/**
  * Fetches a PGN file from a direct URL, processes it, and updates the UI.
  * @param {string} url - The URL of the PGN file.
  */
 async function loadPgnFromUrl(url) {
   if (!url) return false;
+  if (isLoading) return false; // Evita cargas simultáneas (doble clic)
+
+  isLoading = true;
   try {
     document.getElementById('gameList').innerHTML = 'Cargando PGN...';
     document.getElementById('movesBox').innerHTML = 'Cargando...';
@@ -141,24 +212,7 @@ async function loadPgnFromUrl(url) {
     document.getElementById('listModeBtn').classList.remove('active');
     savedVariants = [];
 
-    let rawPGN;
-    try {
-      // 1. Intento directo (funciona para archivos locales o servidores con CORS)
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Status ${response.status}`);
-      rawPGN = await response.text();
-    } catch (err) {
-      // 2. Si falla (probablemente por CORS), intentamos usar un proxy
-      if (url.startsWith('http')) {
-        console.warn('Fallo carga directa, intentando vía proxy CORS...', err);
-        const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
-        const response = await fetch(proxyUrl);
-        if (!response.ok) throw new Error(`Proxy Status ${response.status}`);
-        rawPGN = await response.text();
-      } else {
-        throw err;
-      }
-    }
+    const rawPGN = await fetchPgnText(url);
 
     // After a successful load, update the saved variants list for this PGN
     const key = getSavedVariantsKey();
@@ -167,10 +221,12 @@ async function loadPgnFromUrl(url) {
     return true;
   } catch (error) {
     console.error('Failed to load PGN:', error);
-    document.getElementById('gameList').innerHTML = `<span style="color:red;">Error al cargar PGN desde URL</span>`;
+    document.getElementById('gameList').innerHTML = `<span style="color:red;">Error al cargar PGN: ${error.message}</span>`;
     pgnData = [];
     resetBoardToInitialState();
     return false;
+  } finally {
+    isLoading = false;
   }
 }
 
@@ -232,9 +288,14 @@ function resetBoardToInitialState() {
 // Service Worker
 // ─────────────────────────────────────────────────────────────────────────────
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
+  // Evitar SW en entorno local para prevenir problemas de caché/red durante desarrollo
+  const isLocal = window.location.hostname === 'localhost' || window.location.protocol === 'file:';
+  
+  if ('serviceWorker' in navigator && !isLocal) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('service-worker.js');
+      navigator.serviceWorker.register('service-worker.js').catch(err => {
+        console.warn('SW registration failed:', err);
+      });
     });
   }
 }
