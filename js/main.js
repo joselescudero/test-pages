@@ -323,6 +323,17 @@ function initArrowMarkers() {
   });
 }
 
+function initCommentBox() {
+  const movesBox = document.getElementById('movesBox');
+  if (!movesBox) return;
+  
+  const commentBox = document.createElement('div');
+  commentBox.id = 'commentBox';
+  commentBox.style.display = 'none'; // Oculto por defecto si no hay comentario
+  
+  movesBox.parentNode.insertBefore(commentBox, movesBox);
+}
+
 function clearOverlays() {
   const svg = document.getElementById('arrowOverlay');
   Array.from(svg.children).forEach(child => {
@@ -471,6 +482,18 @@ function updateMovesBox() {
   } else {
     nagBox.textContent = '';
     nagBox.style.display = 'none';
+  }
+
+  // Update Comment Box
+  const commentBox = document.getElementById('commentBox');
+  if (commentBox) {
+    const commentText = (curMove && curMove.comment) ? curMove.comment : '';
+    if (commentText) {
+      commentBox.textContent = commentText;
+      commentBox.style.display = 'block';
+    } else {
+      commentBox.style.display = 'none';
+    }
   }
 }
 
@@ -950,6 +973,7 @@ window.onload = async function () {
     pieceTheme: 'https://raw.githubusercontent.com/oakmac/chessboardjs/master/website/img/chesspieces/wikipedia/{piece}.png'
   });
 
+  initCommentBox();
   initArrowMarkers();
   initStockfish();
   setupEventListeners();

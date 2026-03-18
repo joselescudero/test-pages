@@ -139,7 +139,8 @@ function parseVariantLine(tokens, pos, ancestorMoves, allGames) {
     san: m.san,
     nags: m.nags ? [...m.nags] : [],
     arrows: m.arrows.map(a => ({ ...a })),
-    circles: m.circles.map(c => ({ ...c }))
+    circles: m.circles.map(c => ({ ...c })),
+    comment: m.comment || ''
   }));
 
   while (pos.i < tokens.length) {
@@ -162,7 +163,7 @@ function parseVariantLine(tokens, pos, ancestorMoves, allGames) {
 
     if (t.type === 'move') {
       pos.i++;
-      const move = { san: t.san, nags: [], arrows: [], circles: [] };
+      const move = { san: t.san, nags: [], arrows: [], circles: [], comment: '' };
       // Consume NAGs immediately following the move
       while (pos.i < tokens.length && tokens[pos.i].type === 'nag') {
         move.nags.push(tokens[pos.i].num);
@@ -173,6 +174,7 @@ function parseVariantLine(tokens, pos, ancestorMoves, allGames) {
         const ann = parseAnnotation(tokens[pos.i].text);
         move.arrows = ann.arrows;
         move.circles = ann.circles;
+        move.comment = tokens[pos.i].text.replace(/\[%[^\]]+\]/g, '').trim();
         pos.i++;
       }
       moves.push(move);
@@ -188,6 +190,10 @@ function parseVariantLine(tokens, pos, ancestorMoves, allGames) {
           const last = moves[moves.length - 1];
           if (last.arrows.length === 0) last.arrows = ann.arrows;
           if (last.circles.length === 0) last.circles = ann.circles;
+          
+          // Append text comment
+          const cleanText = t.text.replace(/\[%[^\]]+\]/g, '').trim();
+          if (cleanText) last.comment = last.comment ? (last.comment + ' ' + cleanText) : cleanText;
         }
       }
       pos.i++;

@@ -59,7 +59,7 @@ body {
 }
 
 /* Center the main blocks of content within tabs */
-#controls, #movesBox, #nagBox, #capturedPiecesBar, #gameList, .config-row, #pgnList ul {
+#controls, #movesBox, #commentBox, #nagBox, #capturedPiecesBar, #gameList, .config-row, #pgnList ul {
     margin-left: auto;
     margin-right: auto;
     max-width: 625px;
@@ -89,6 +89,17 @@ body {
   border-bottom: 1px solid #ddd;
   padding: 8px 10px;
   word-break: break-word;
+}
+
+#commentBox {
+  font-size: 14px;
+  line-height: 1.5;
+  background: #fdfdfd;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px 10px;
+  color: #333;
+  margin-bottom: 6px;
 }
 
 /* NAG annotation box */
