@@ -13,6 +13,7 @@ const PGN_BASE_URL = 'https://joselescudero.github.io/test-pages/pgn/';
 let board, chess, stockfish;
 let pgnData = []; // Holds all games (main + variants) from the loaded PGN
 let rawPgnGames = []; // Holds the original, unsorted games from the parser
+const CUSTOM_PGNS_KEY = 'pgn_custom_sources';
 let currentVar = 0, currentMove = 0;
 let automoveTimer = null;
 let savedVariants = [];
@@ -31,40 +32,106 @@ function buildPgnSelectionList() {
   container.innerHTML = '';
   const ul = document.createElement('ul');
 
+  // 1. Static PGNs
   for (const displayName in PGN_SOURCES) {
     const pgnName = PGN_SOURCES[displayName];
     const li = document.createElement('li');
     const button = document.createElement('button');
     button.textContent = displayName;
     button.dataset.pgnName = pgnName;
+    button.dataset.type = 'static';
     li.appendChild(button);
     ul.appendChild(li);
   }
+
+  // 2. Custom PGNs
+  const customPgns = JSON.parse(localStorage.getItem(CUSTOM_PGNS_KEY)) || [];
+  customPgns.forEach((item, index) => {
+    const li = document.createElement('li');
+    li.style.display = 'flex';
+    li.style.gap = '5px';
+
+    const button = document.createElement('button');
+    button.textContent = item.name;
+    button.dataset.pgnUrl = item.url;
+    button.dataset.type = 'custom';
+    button.style.flex = '1';
+
+    const delBtn = document.createElement('button');
+    delBtn.textContent = '❌';
+    delBtn.title = 'Eliminar';
+    delBtn.style.width = 'auto';
+    delBtn.style.padding = '0 10px';
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (confirm(`¿Eliminar "${item.name}" de la lista?`)) {
+        customPgns.splice(index, 1);
+        localStorage.setItem(CUSTOM_PGNS_KEY, JSON.stringify(customPgns));
+        buildPgnSelectionList();
+      }
+    };
+
+    li.appendChild(button);
+    li.appendChild(delBtn);
+    ul.appendChild(li);
+  });
+
+  // 3. Add Custom PGN Button
+  const liAdd = document.createElement('li');
+  const btnAdd = document.createElement('button');
+  btnAdd.textContent = '➕ Añadir PGN URL';
+  btnAdd.style.backgroundColor = '#eef';
+  btnAdd.onclick = () => {
+    const name = prompt('Nombre de la partida:');
+    if (!name) return;
+    const url = prompt('URL del archivo .pgn:');
+    if (!url) return;
+    const list = JSON.parse(localStorage.getItem(CUSTOM_PGNS_KEY)) || [];
+    list.push({ name, url });
+    localStorage.setItem(CUSTOM_PGNS_KEY, JSON.stringify(list));
+    buildPgnSelectionList();
+  };
+  liAdd.appendChild(btnAdd);
+  ul.appendChild(liAdd);
+
   container.appendChild(ul);
 
   container.addEventListener('click', async (e) => {
-    if (e.target.matches('button')) {
-      const pgnName = e.target.dataset.pgnName;
-      localStorage.setItem('selected_pgn', pgnName);
-      const success = await loadPgnByName(pgnName);
+    const btn = e.target.closest('button');
+    if (btn && btn.dataset.type) {
+      const isStatic = btn.dataset.type === 'static';
+      const pgnSource = isStatic ? btn.dataset.pgnName : btn.dataset.pgnUrl;
+      
+      localStorage.setItem('selected_pgn', pgnSource);
+      localStorage.setItem('selected_pgn_is_custom', !isStatic);
+
+      const success = isStatic ? await loadPgnByName(pgnSource) : await loadPgnFromUrl(pgnSource);
+      
       if (success) {
         currentVar = 0;
         currentMove = startMove();
         gotoMove();
+        switchTab('tablero');
       }
-      // The user is now automatically switched to the board after selecting a PGN
-      switchTab('tablero');
     }
   });
 }
 
 /**
- * Fetches a PGN file from the server, processes it, and updates the UI.
- * @param {string} pgnName - The name of the PGN file (e.g., 'apertura_alfil').
+ * Loads a static PGN by name (constructs the URL).
  */
 async function loadPgnByName(pgnName) {
   if (!pgnName) return;
   const url = `${PGN_BASE_URL}${pgnName}.pgn`;
+  return await loadPgnFromUrl(url);
+}
+
+/**
+ * Fetches a PGN file from a direct URL, processes it, and updates the UI.
+ * @param {string} url - The URL of the PGN file.
+ */
+async function loadPgnFromUrl(url) {
+  if (!url) return false;
   try {
     document.getElementById('gameList').innerHTML = 'Cargando PGN...';
     document.getElementById('movesBox').innerHTML = 'Cargando...';
@@ -74,11 +141,24 @@ async function loadPgnByName(pgnName) {
     document.getElementById('listModeBtn').classList.remove('active');
     savedVariants = [];
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    let rawPGN;
+    try {
+      // 1. Intento directo (funciona para archivos locales o servidores con CORS)
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Status ${response.status}`);
+      rawPGN = await response.text();
+    } catch (err) {
+      // 2. Si falla (probablemente por CORS), intentamos usar un proxy
+      if (url.startsWith('http')) {
+        console.warn('Fallo carga directa, intentando vía proxy CORS...', err);
+        const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+        const response = await fetch(proxyUrl);
+        if (!response.ok) throw new Error(`Proxy Status ${response.status}`);
+        rawPGN = await response.text();
+      } else {
+        throw err;
+      }
     }
-    const rawPGN = await response.text();
 
     // After a successful load, update the saved variants list for this PGN
     const key = getSavedVariantsKey();
@@ -87,7 +167,7 @@ async function loadPgnByName(pgnName) {
     return true;
   } catch (error) {
     console.error('Failed to load PGN:', error);
-    document.getElementById('gameList').innerHTML = `<span style="color:red;">Error al cargar ${pgnName}.pgn</span>`;
+    document.getElementById('gameList').innerHTML = `<span style="color:red;">Error al cargar PGN desde URL</span>`;
     pgnData = [];
     resetBoardToInitialState();
     return false;
@@ -822,14 +902,18 @@ window.onload = async function () {
   buildPgnSelectionList();
 
   const savedPgn = localStorage.getItem('selected_pgn');
-  const isValidSavedPgn = savedPgn && Object.values(PGN_SOURCES).includes(savedPgn);
+  const isCustom = localStorage.getItem('selected_pgn_is_custom') === 'true';
+  
+  // Check validity: if static, must be in list. If custom, must be a truthy string.
+  const isValidSavedPgn = savedPgn && (isCustom || Object.values(PGN_SOURCES).includes(savedPgn));
 
   if (isValidSavedPgn) {
     const savedVar = parseInt(localStorage.getItem('pgn_var'), 10);
     const savedMove = parseInt(localStorage.getItem('pgn_move'), 10);
     
     // Load the PGN and then apply the saved position
-    const success = await loadPgnByName(savedPgn);
+    const success = isCustom ? await loadPgnFromUrl(savedPgn) : await loadPgnByName(savedPgn);
+    
     if (success) {
         if (!isNaN(savedVar) && savedVar >= 0 && savedVar < pgnData.length) {
             currentVar = savedVar;
