@@ -32,17 +32,80 @@ let isLoading = false;
 function buildPgnSelectionList() {
   const container = document.getElementById('pgnList');
   container.innerHTML = '';
+  
+  // --- Controles: Aceptar y Deseleccionar ---
+  const controlsDiv = document.createElement('div');
+  controlsDiv.style.marginBottom = '15px';
+  controlsDiv.style.display = 'flex';
+  controlsDiv.style.gap = '10px';
+
+  const btnAccept = document.createElement('button');
+  btnAccept.textContent = '✅ Cargar seleccionados';
+  btnAccept.style.flex = '2';
+  btnAccept.style.backgroundColor = '#e8f5e9'; // Verde claro
+  btnAccept.style.fontWeight = 'bold';
+  btnAccept.onclick = () => {
+    const selected = [];
+    container.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+      selected.push({
+        value: cb.dataset.value,
+        type: cb.dataset.type,
+        name: cb.dataset.name
+      });
+    });
+    if (selected.length === 0) {
+      alert('Seleccione al menos un archivo PGN.');
+      return;
+    }
+    loadMultiplePgns(selected);
+  };
+
+  const btnDeselect = document.createElement('button');
+  btnDeselect.textContent = '❌ Quitar selección';
+  btnDeselect.style.flex = '1';
+  btnDeselect.onclick = () => {
+    container.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+  };
+
+  controlsDiv.appendChild(btnAccept);
+  controlsDiv.appendChild(btnDeselect);
+  container.appendChild(controlsDiv);
+
+  // --- Lista de PGNs ---
   const ul = document.createElement('ul');
+
+  // Recuperar selección guardada
+  const savedList = JSON.parse(localStorage.getItem('selected_pgns_list')) || [];
+  const isChecked = (val) => savedList.some(item => item.value === val);
 
   // 1. Static PGNs
   for (const displayName in PGN_SOURCES) {
     const pgnName = PGN_SOURCES[displayName];
     const li = document.createElement('li');
-    const button = document.createElement('button');
-    button.textContent = displayName;
-    button.dataset.pgnName = pgnName;
-    button.dataset.type = 'static';
-    li.appendChild(button);
+    
+    li.style.display = 'flex';
+    li.style.alignItems = 'center';
+    li.style.padding = '5px 0';
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.id = 'pgn_static_' + pgnName;
+    chk.dataset.value = pgnName;
+    chk.dataset.type = 'static';
+    chk.dataset.name = displayName;
+    chk.checked = isChecked(pgnName);
+    chk.style.marginRight = '12px';
+    chk.style.transform = 'scale(1.3)'; // Checkbox más grande
+    
+    const lbl = document.createElement('label');
+    lbl.htmlFor = chk.id;
+    lbl.textContent = displayName;
+    lbl.style.flex = '1';
+    lbl.style.cursor = 'pointer';
+    lbl.style.fontSize = '16px';
+
+    li.appendChild(chk);
+    li.appendChild(lbl);
     ul.appendChild(li);
   }
 
@@ -51,21 +114,33 @@ function buildPgnSelectionList() {
   customPgns.forEach((item, index) => {
     const li = document.createElement('li');
     li.style.display = 'flex';
-    li.style.gap = '5px';
+    li.style.alignItems = 'center';
+    li.style.padding = '5px 0';
 
-    const button = document.createElement('button');
-    button.textContent = item.name;
-    button.dataset.pgnUrl = item.url;
-    button.dataset.type = 'custom';
-    button.style.flex = '1';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.id = 'pgn_custom_' + index;
+    chk.dataset.value = item.url;
+    chk.dataset.type = 'custom';
+    chk.dataset.name = item.name;
+    chk.checked = isChecked(item.url);
+    chk.style.marginRight = '12px';
+    chk.style.transform = 'scale(1.3)';
+
+    const lbl = document.createElement('label');
+    lbl.htmlFor = chk.id;
+    lbl.textContent = item.name;
+    lbl.style.flex = '1';
+    lbl.style.cursor = 'pointer';
+    lbl.style.fontSize = '16px';
 
     const delBtn = document.createElement('button');
     delBtn.textContent = '❌';
     delBtn.title = 'Eliminar';
-    delBtn.style.width = 'auto';
-    delBtn.style.padding = '0 10px';
+    delBtn.style.width = 'auto'; // Override css global
+    delBtn.style.marginLeft = 'auto';
+    delBtn.style.padding = '5px 10px';
     delBtn.onclick = (e) => {
-      e.stopPropagation();
       if (confirm(`¿Eliminar "${item.name}" de la lista?`)) {
         customPgns.splice(index, 1);
         localStorage.setItem(CUSTOM_PGNS_KEY, JSON.stringify(customPgns));
@@ -73,7 +148,8 @@ function buildPgnSelectionList() {
       }
     };
 
-    li.appendChild(button);
+    li.appendChild(chk);
+    li.appendChild(lbl);
     li.appendChild(delBtn);
     ul.appendChild(li);
   });
@@ -83,6 +159,7 @@ function buildPgnSelectionList() {
   const btnAdd = document.createElement('button');
   btnAdd.textContent = '➕ Añadir PGN URL';
   btnAdd.style.backgroundColor = '#eef';
+  btnAdd.style.width = '100%';
   btnAdd.onclick = () => {
     const name = prompt('Nombre de la partida:');
     if (!name) return;
@@ -97,26 +174,6 @@ function buildPgnSelectionList() {
   ul.appendChild(liAdd);
 
   container.appendChild(ul);
-
-  container.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button');
-    if (btn && btn.dataset.type) {
-      const isStatic = btn.dataset.type === 'static';
-      const pgnSource = isStatic ? btn.dataset.pgnName : btn.dataset.pgnUrl;
-      
-      localStorage.setItem('selected_pgn', pgnSource);
-      localStorage.setItem('selected_pgn_is_custom', !isStatic);
-
-      const success = isStatic ? await loadPgnByName(pgnSource) : await loadPgnFromUrl(pgnSource);
-      
-      if (success) {
-        currentVar = 0;
-        currentMove = startMove();
-        gotoMove();
-        switchTab('tablero');
-      }
-    }
-  });
 }
 
 /**
@@ -225,6 +282,70 @@ async function loadPgnFromUrl(url) {
     pgnData = [];
     resetBoardToInitialState();
     return false;
+  } finally {
+    isLoading = false;
+  }
+}
+
+/**
+ * Carga múltiples PGNs basados en la lista de selección.
+ * @param {Array<{value: string, type: string, name: string}>} selectionList
+ */
+async function loadMultiplePgns(selectionList) {
+  if (isLoading) return;
+  isLoading = true;
+
+  document.getElementById('gameList').innerHTML = 'Cargando PGNs...';
+  document.getElementById('movesBox').innerHTML = 'Cargando...';
+
+  // Guardar selección actual
+  localStorage.setItem('selected_pgns_list', JSON.stringify(selectionList));
+  // Limpiar selección antigua para evitar confusiones
+  localStorage.removeItem('selected_pgn');
+
+  // Reset UI
+  listModeActive = false;
+  document.getElementById('listModeBtn').classList.remove('active');
+  savedVariants = [];
+  rawPgnGames = [];
+
+  try {
+    for (const item of selectionList) {
+      let url;
+      if (item.type === 'static') {
+        url = `${PGN_BASE_URL}${item.value}.pgn`;
+      } else {
+        url = item.value;
+      }
+      
+      try {
+        const rawPGN = await fetchPgnText(url);
+        const games = parsePGN(rawPGN);
+        rawPgnGames.push(...games);
+      } catch (err) {
+        console.error(`Error cargando ${item.name}:`, err);
+      }
+    }
+
+    // Obtener variantes guardadas (estrellas) para esta combinación
+    const key = getSavedVariantsKey();
+    savedVariants = key ? JSON.parse(localStorage.getItem(key)) || [] : [];
+
+    console.log('Total partidas cargadas:', rawPgnGames.length);
+    applyGameSorting();
+
+    if (pgnData.length > 0) {
+      currentVar = 0;
+      currentMove = startMove();
+      gotoMove();
+      switchTab('tablero');
+    } else {
+      document.getElementById('gameList').innerHTML = 'No se encontraron partidas válidas.';
+      resetBoardToInitialState();
+    }
+  } catch (error) {
+    console.error('Error multi-carga:', error);
+    document.getElementById('gameList').innerHTML = `Error: ${error.message}`;
   } finally {
     isLoading = false;
   }
@@ -695,9 +816,20 @@ function switchTab(tabName) {
 }
 
 function getSavedVariantsKey() {
+    // 1. Intentar usar la lista múltiple
+    const listStr = localStorage.getItem('selected_pgns_list');
+    if (listStr) {
+      const list = JSON.parse(listStr);
+      // Generar hash basado en los valores ordenados para consistencia
+      const str = list.map(i => i.value).sort().join('|');
+      let hash = 0;
+      for(let i=0; i<str.length; i++) hash = ((hash << 5) - hash) + str.charCodeAt(i) | 0;
+      return `pgn_savedVariants_multi_${hash}`;
+    }
+    // 2. Fallback antiguo
     const pgnName = localStorage.getItem('selected_pgn');
-    if (!pgnName) return null;
-    return `pgn_savedVariants_${pgnName}`;
+    if (pgnName) return `pgn_savedVariants_${pgnName}`;
+    return null;
 }
 
 function updateSaveButtonState() {
@@ -986,33 +1118,39 @@ window.onload = async function () {
   
   buildPgnSelectionList();
 
-  const savedPgn = localStorage.getItem('selected_pgn');
-  const isCustom = localStorage.getItem('selected_pgn_is_custom') === 'true';
-  
-  // Check validity: if static, must be in list. If custom, must be a truthy string.
-  const isValidSavedPgn = savedPgn && (isCustom || Object.values(PGN_SOURCES).includes(savedPgn));
-
-  if (isValidSavedPgn) {
-    const savedVar = parseInt(localStorage.getItem('pgn_var'), 10);
-    const savedMove = parseInt(localStorage.getItem('pgn_move'), 10);
-    
-    // Load the PGN and then apply the saved position
-    const success = isCustom ? await loadPgnFromUrl(savedPgn) : await loadPgnByName(savedPgn);
-    
-    if (success) {
-        if (!isNaN(savedVar) && savedVar >= 0 && savedVar < pgnData.length) {
-            currentVar = savedVar;
-            if (!isNaN(savedMove) && savedMove >= 0 && savedMove <= pgnData[currentVar].moves.length) {
-                currentMove = savedMove;
-            }
-        } else {
-            currentVar = 0;
-            currentMove = startMove();
-        }
+  // Intentar cargar selección múltiple guardada
+  const savedListStr = localStorage.getItem('selected_pgns_list');
+  if (savedListStr) {
+    const list = JSON.parse(savedListStr);
+    if (list && list.length > 0) {
+      await loadMultiplePgns(list);
+      // Restaurar posición si es posible
+      const savedVar = parseInt(localStorage.getItem('pgn_var'), 10);
+      const savedMove = parseInt(localStorage.getItem('pgn_move'), 10);
+      if (pgnData.length > 0) {
+        currentVar = (savedVar >= 0 && savedVar < pgnData.length) ? savedVar : 0;
+        currentMove = (savedMove >= 0) ? savedMove : startMove();
         gotoMove();
+      }
     }
   } else {
-    resetBoardToInitialState();
+    // Migración: Comprobar selección antigua simple
+    const savedPgn = localStorage.getItem('selected_pgn');
+    const isCustom = localStorage.getItem('selected_pgn_is_custom') === 'true';
+    const isValidSavedPgn = savedPgn && (isCustom || Object.values(PGN_SOURCES).includes(savedPgn));
+    
+    if (isValidSavedPgn) {
+      const type = isCustom ? 'custom' : 'static';
+      let name = savedPgn;
+      if (!isCustom) {
+         const found = Object.entries(PGN_SOURCES).find(([k,v]) => v === savedPgn);
+         if (found) name = found[0];
+      }
+      // Cargar como lista de un elemento
+      await loadMultiplePgns([{ value: savedPgn, type, name }]);
+    } else {
+      resetBoardToInitialState();
+    }
   }
 
   switchTab('tablero');
