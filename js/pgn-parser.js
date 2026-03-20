@@ -45,8 +45,25 @@ function tokenizePGN(pgn) {
 
     // PGN tag headers  [TagName "..."]
     if (ch === '[') {
-      while (i < len && pgn[i] !== ']') i++;
-      i++; // skip ']'
+      let j = i + 1;
+      let quoteOpen = false;
+      while (j < len) {
+        if (pgn[j] === '"' && (j === 0 || pgn[j - 1] !== '\\')) quoteOpen = !quoteOpen;
+        if (!quoteOpen && pgn[j] === ']') break;
+        j++;
+      }
+      // Extract Name and Value: [Event "Details"]
+      const content = pgn.slice(i + 1, j).trim();
+      const firstSpace = content.indexOf(' ');
+      if (firstSpace > 0) {
+        const tagName = content.slice(0, firstSpace).trim();
+        const valPart = content.slice(firstSpace).trim();
+        if (valPart.startsWith('"') && valPart.endsWith('"')) {
+          const val = valPart.slice(1, -1).replace(/\\"/g, '"');
+          tokens.push({ type: 'tag', name: tagName, value: val });
+        }
+      }
+      i = j + 1;
       continue;
     }
 
@@ -219,16 +236,28 @@ function parsePGN(pgn) {
   const tokens = tokenizePGN(pgn);
   const allGames = [];
   const pos = { i: 0 };
+  let chapterIndex = 0;
 
   while (pos.i < tokens.length) {
+    const headers = {};
+    // Consume tags before moves
+    while (pos.i < tokens.length && tokens[pos.i].type === 'tag') {
+      headers[tokens[pos.i].name] = tokens[pos.i].value;
+      pos.i++;
+    }
+
     const gameVariants = [];
     // Extrae la línea principal de la partida actual; parseVariantLine se detiene al ver un resultado (*)
     const mainMoves = parseVariantLine(tokens, pos, [], gameVariants);
 
     // Si se encontraron movimientos, guardamos la partida y sus variantes
-    if (mainMoves.length > 0 || gameVariants.length > 0) {
-      allGames.push({ moves: mainMoves });
-      allGames.push(...gameVariants);
+    // También si hay headers (caso raro de partida sin movimientos pero con resultado/tags)
+    if (mainMoves.length > 0 || gameVariants.length > 0 || Object.keys(headers).length > 0) {
+      const chapterInfo = { headers, chapterIndex };
+      allGames.push({ moves: mainMoves, ...chapterInfo });
+      // Propagate headers and chapterIndex to all variants
+      allGames.push(...gameVariants.map(v => ({ ...v, ...chapterInfo })));
+      chapterIndex++;
     }
   }
 

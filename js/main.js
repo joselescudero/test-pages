@@ -27,6 +27,82 @@ let isLoading = false;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Helper to analyze PGN games and extract Study Name and Chapter list.
+ * Handles "StudyName: ChapterName" format common in Lichess studies.
+ * parsePGN flattens variants, so we group by chapterIndex.
+ */
+function extractPgnMetadata(games) {
+  const uniqueChapters = [];
+  const seen = new Set();
+  
+  for (const g of games) {
+    if (g.chapterIndex !== undefined && !seen.has(g.chapterIndex)) {
+      seen.add(g.chapterIndex);
+      uniqueChapters.push({
+        index: g.chapterIndex,
+        headers: g.headers || {}
+      });
+    }
+  }
+
+  if (uniqueChapters.length === 0) return { name: 'PGN Desconocido', chapters: [] };
+
+  // 1. Determine PGN Name (Study Name)
+  const events = uniqueChapters.map(c => c.headers['Event'] || '').filter(e => e && e !== '?');
+  let pgnName = '';
+  let studyPrefix = '';
+
+  if (events.length > 0) {
+      // Check for common prefix ending in ": "
+      const first = events[0];
+      const colonIdx = first.indexOf(': ');
+      if (colonIdx > 0) {
+          const prefix = first.substring(0, colonIdx);
+          const isCommon = events.every(e => e.startsWith(prefix + ': '));
+          if (isCommon) {
+              pgnName = prefix;
+              studyPrefix = prefix + ': ';
+          }
+      }
+      
+      // Fallback: Use first event
+      if (!pgnName) pgnName = first;
+  } else {
+      // Fallback: Use players of first game or generic
+      const h = uniqueChapters[0].headers;
+      if (h['White'] && h['Black']) pgnName = `${h['White']} vs ${h['Black']}`;
+      else pgnName = 'Partida Importada';
+  }
+
+  // 2. Build Chapter List
+  const chapters = uniqueChapters.map(c => {
+      const h = c.headers;
+      let name = '';
+
+      // Cleaned Study Name
+      if (studyPrefix && h['Event'] && h['Event'].startsWith(studyPrefix)) {
+          name = h['Event'].substring(studyPrefix.length);
+      } else {
+          // Standard Name Construction
+           if (h['White'] && h['Black'] && h['White'] !== '?' && h['Black'] !== '?') {
+              name = `${h['White']} vs ${h['Black']}`;
+              // Append Event if distinct and useful
+              if (h['Event'] && h['Event'] !== '?' && h['Event'] !== name && h['Event'] !== pgnName) {
+                  name = `${h['Event']} (${name})`;
+              }
+           } else if (h['Event'] && h['Event'] !== '?') {
+               name = h['Event'];
+           } else {
+               name = `Capítulo ${c.index + 1}`;
+           }
+      }
+      return { index: c.index, name: name };
+  });
+
+  return { name: pgnName, chapters };
+}
+
+/**
  * Builds the list of available PGN files for selection.
  */
 function buildPgnSelectionList() {
@@ -39,6 +115,36 @@ function buildPgnSelectionList() {
   controlsDiv.style.display = 'flex';
   controlsDiv.style.gap = '10px';
 
+  // Logic to handle parent/child checkbox interactions
+  const handleCheckboxChange = (e) => {
+    const cb = e.target;
+    if (cb.dataset.role === 'parent') {
+        // Parent toggles all children
+        const parentLi = cb.closest('.pgn-parent-li');
+        if (parentLi) {
+            const children = parentLi.querySelectorAll('input[data-role="child"]');
+            children.forEach(child => child.checked = cb.checked);
+        }
+    } else if (cb.dataset.role === 'child') {
+        // Child updates parent state
+        const parentLi = cb.closest('.pgn-parent-li');
+        const parentCb = parentLi.querySelector('input[data-role="parent"]');
+        const allChildren = parentLi.querySelectorAll('input[data-role="child"]');
+        const checkedChildren = parentLi.querySelectorAll('input[data-role="child"]:checked');
+        
+        if (checkedChildren.length === 0) {
+            parentCb.checked = false;
+            parentCb.indeterminate = false;
+        } else if (checkedChildren.length === allChildren.length) {
+            parentCb.checked = true;
+            parentCb.indeterminate = false;
+        } else {
+            parentCb.checked = false;
+            parentCb.indeterminate = true;
+        }
+    }
+  };
+
   const btnAccept = document.createElement('button');
   btnAccept.textContent = '✅ Cargar seleccionados';
   btnAccept.style.flex = '2';
@@ -46,13 +152,51 @@ function buildPgnSelectionList() {
   btnAccept.style.fontWeight = 'bold';
   btnAccept.onclick = () => {
     const selected = [];
-    container.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
-      selected.push({
-        value: cb.dataset.value,
-        type: cb.dataset.type,
-        name: cb.dataset.name
-      });
+    
+    // Group by PGN source
+    const sources = new Map(); // url -> {type, name, chapters: Set}
+    
+    container.querySelectorAll('input[type="checkbox"]:checked, input[type="checkbox"]:indeterminate').forEach(cb => {
+        const value = cb.dataset.value;
+        if (!sources.has(value)) {
+            sources.set(value, {
+                value: value,
+                type: cb.dataset.type,
+                name: cb.dataset.name,
+                chapters: new Set(),
+                loadAll: false
+            });
+        }
+        const entry = sources.get(value);
+        
+        if (cb.dataset.role === 'parent') {
+            // If parent is checked and not indeterminate, load all
+            if (cb.checked && !cb.indeterminate) {
+                entry.loadAll = true;
+            }
+        } else if (cb.dataset.role === 'child' && cb.checked) {
+            entry.chapters.add(parseInt(cb.dataset.chapter, 10));
+        }
     });
+
+    // Convert map to array
+    sources.forEach(entry => {
+        // If loadAll is true, we ignore individual chapters. 
+        // If loadAll is false but chapters were selected, we pass the array.
+        const finalEntry = {
+            value: entry.value,
+            type: entry.type,
+            name: entry.name
+        };
+        if (!entry.loadAll && entry.chapters.size > 0) {
+            finalEntry.chapters = Array.from(entry.chapters);
+        }
+        // Only add if we are loading something
+        if (entry.loadAll || (finalEntry.chapters && finalEntry.chapters.length > 0)) {
+            selected.push(finalEntry);
+        }
+    });
+
     if (selected.length === 0) {
       alert('Seleccione al menos un archivo PGN.');
       return;
@@ -93,6 +237,8 @@ function buildPgnSelectionList() {
     chk.dataset.value = pgnName;
     chk.dataset.type = 'static';
     chk.dataset.name = displayName;
+    chk.dataset.role = 'parent'; // Treat as parent with no children visible
+    chk.onchange = handleCheckboxChange;
     chk.checked = isChecked(pgnName);
     chk.style.marginRight = '12px';
     chk.style.transform = 'scale(1.3)'; // Checkbox más grande
@@ -113,9 +259,15 @@ function buildPgnSelectionList() {
   const customPgns = JSON.parse(localStorage.getItem(CUSTOM_PGNS_KEY)) || [];
   customPgns.forEach((item, index) => {
     const li = document.createElement('li');
+    li.className = 'pgn-parent-li';
     li.style.display = 'flex';
-    li.style.alignItems = 'center';
+    li.style.flexDirection = 'column';
     li.style.padding = '5px 0';
+
+    const headerDiv = document.createElement('div');
+    headerDiv.style.display = 'flex';
+    headerDiv.style.alignItems = 'center';
+    headerDiv.style.width = '100%';
 
     const chk = document.createElement('input');
     chk.type = 'checkbox';
@@ -123,7 +275,9 @@ function buildPgnSelectionList() {
     chk.dataset.value = item.url;
     chk.dataset.type = 'custom';
     chk.dataset.name = item.name;
-    chk.checked = isChecked(item.url);
+    chk.dataset.role = 'parent';
+    chk.checked = isChecked(item.url); // Default check if in saved list
+    chk.onchange = handleCheckboxChange;
     chk.style.marginRight = '12px';
     chk.style.transform = 'scale(1.3)';
 
@@ -148,9 +302,46 @@ function buildPgnSelectionList() {
       }
     };
 
-    li.appendChild(chk);
-    li.appendChild(lbl);
-    li.appendChild(delBtn);
+    headerDiv.appendChild(chk);
+    headerDiv.appendChild(lbl);
+    headerDiv.appendChild(delBtn);
+    li.appendChild(headerDiv);
+
+    // If this PGN has chapters info, render children
+    if (item.chapters && item.chapters.length > 0) {
+        const chapterUl = document.createElement('ul');
+        chapterUl.style.paddingLeft = '30px';
+        chapterUl.style.marginTop = '5px';
+        
+        item.chapters.forEach(chap => {
+            const cLi = document.createElement('li');
+            cLi.style.listStyle = 'none';
+            cLi.style.marginBottom = '4px';
+            
+            const cChk = document.createElement('input');
+            cChk.type = 'checkbox';
+            cChk.id = `pgn_custom_${index}_ch_${chap.index}`;
+            cChk.dataset.value = item.url; // Same value as parent to group them
+            cChk.dataset.type = 'custom';
+            cChk.dataset.role = 'child';
+            cChk.dataset.chapter = chap.index;
+            cChk.checked = chk.checked; // Init state based on parent
+            cChk.onchange = handleCheckboxChange;
+            cChk.style.marginRight = '8px';
+            
+            const cLbl = document.createElement('label');
+            cLbl.htmlFor = cChk.id;
+            cLbl.textContent = chap.name;
+            cLbl.style.cursor = 'pointer';
+            cLbl.style.fontSize = '14px';
+            
+            cLi.appendChild(cChk);
+            cLi.appendChild(cLbl);
+            chapterUl.appendChild(cLi);
+        });
+        li.appendChild(chapterUl);
+    }
+
     ul.appendChild(li);
   });
 
@@ -160,15 +351,31 @@ function buildPgnSelectionList() {
   btnAdd.textContent = '➕ Añadir PGN URL';
   btnAdd.style.backgroundColor = '#eef';
   btnAdd.style.width = '100%';
-  btnAdd.onclick = () => {
-    const name = prompt('Nombre de la partida:');
-    if (!name) return;
+  btnAdd.onclick = async () => {
     const url = prompt('URL del archivo .pgn:');
     if (!url) return;
-    const list = JSON.parse(localStorage.getItem(CUSTOM_PGNS_KEY)) || [];
-    list.push({ name, url });
-    localStorage.setItem(CUSTOM_PGNS_KEY, JSON.stringify(list));
-    buildPgnSelectionList();
+    
+    btnAdd.textContent = '⏳ Leyendo archivo...';
+    btnAdd.disabled = true;
+
+    try {
+        // Fetch and parse immediately to get chapters
+        const rawText = await fetchPgnText(url);
+        // We parse to verify it works and extract metadata
+        const games = parsePGN(rawText);
+        const metadata = extractPgnMetadata(games);
+
+        const list = JSON.parse(localStorage.getItem(CUSTOM_PGNS_KEY)) || [];
+        list.push({ name: metadata.name, url, chapters: metadata.chapters });
+        localStorage.setItem(CUSTOM_PGNS_KEY, JSON.stringify(list));
+        buildPgnSelectionList();
+    } catch (e) {
+        alert('Error al leer o procesar el PGN: ' + e.message);
+        console.error(e);
+    } finally {
+        btnAdd.textContent = '➕ Añadir PGN URL';
+        btnAdd.disabled = false;
+    }
   };
   liAdd.appendChild(btnAdd);
   ul.appendChild(liAdd);
@@ -289,7 +496,7 @@ async function loadPgnFromUrl(url) {
 
 /**
  * Carga múltiples PGNs basados en la lista de selección.
- * @param {Array<{value: string, type: string, name: string}>} selectionList
+ * @param {Array<{value: string, type: string, name: string, chapters?: number[]}>} selectionList
  */
 async function loadMultiplePgns(selectionList) {
   if (isLoading) return;
@@ -321,7 +528,15 @@ async function loadMultiplePgns(selectionList) {
       try {
         const rawPGN = await fetchPgnText(url);
         const games = parsePGN(rawPGN);
-        rawPgnGames.push(...games);
+        
+        // Filter by chapters if specified
+        if (item.chapters && item.chapters.length > 0) {
+            const filtered = games.filter(g => item.chapters.includes(g.chapterIndex));
+            rawPgnGames.push(...filtered);
+        } else {
+            // Load all (default behavior)
+            rawPgnGames.push(...games);
+        }
       } catch (err) {
         console.error(`Error cargando ${item.name}:`, err);
       }
