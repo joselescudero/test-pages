@@ -240,7 +240,7 @@ function buildPgnSelectionList() {
     chk.dataset.role = 'parent'; // Treat as parent with no children visible
     chk.onchange = handleCheckboxChange;
     chk.checked = isChecked(pgnName);
-    chk.style.marginRight = '12px';
+    chk.style.marginLeft = '12px'; // Checkbox a la derecha
     chk.style.transform = 'scale(1.3)'; // Checkbox más grande
     
     const lbl = document.createElement('label');
@@ -250,8 +250,8 @@ function buildPgnSelectionList() {
     lbl.style.cursor = 'pointer';
     lbl.style.fontSize = '16px';
 
-    li.appendChild(chk);
     li.appendChild(lbl);
+    li.appendChild(chk);
     ul.appendChild(li);
   }
 
@@ -278,7 +278,7 @@ function buildPgnSelectionList() {
     chk.dataset.role = 'parent';
     chk.checked = isChecked(item.url); // Default check if in saved list
     chk.onchange = handleCheckboxChange;
-    chk.style.marginRight = '12px';
+    chk.style.marginLeft = '12px';
     chk.style.transform = 'scale(1.3)';
 
     const lbl = document.createElement('label');
@@ -293,6 +293,7 @@ function buildPgnSelectionList() {
     delBtn.title = 'Eliminar';
     delBtn.style.width = 'auto'; // Override css global
     delBtn.style.marginLeft = 'auto';
+    delBtn.style.marginRight = '8px'; // Espacio con el checkbox
     delBtn.style.padding = '5px 10px';
     delBtn.onclick = (e) => {
       if (confirm(`¿Eliminar "${item.name}" de la lista?`)) {
@@ -302,9 +303,9 @@ function buildPgnSelectionList() {
       }
     };
 
-    headerDiv.appendChild(chk);
     headerDiv.appendChild(lbl);
     headerDiv.appendChild(delBtn);
+    headerDiv.appendChild(chk);
     li.appendChild(headerDiv);
 
     // If this PGN has chapters info, render children
@@ -317,6 +318,8 @@ function buildPgnSelectionList() {
             const cLi = document.createElement('li');
             cLi.style.listStyle = 'none';
             cLi.style.marginBottom = '4px';
+            cLi.style.display = 'flex'; // Alineación flexible
+            cLi.style.alignItems = 'center';
             
             const cChk = document.createElement('input');
             cChk.type = 'checkbox';
@@ -327,16 +330,17 @@ function buildPgnSelectionList() {
             cChk.dataset.chapter = chap.index;
             cChk.checked = chk.checked; // Init state based on parent
             cChk.onchange = handleCheckboxChange;
-            cChk.style.marginRight = '8px';
+            cChk.style.marginLeft = '8px';
             
             const cLbl = document.createElement('label');
             cLbl.htmlFor = cChk.id;
             cLbl.textContent = chap.name;
             cLbl.style.cursor = 'pointer';
             cLbl.style.fontSize = '14px';
+            cLbl.style.flex = '1'; // Ocupar espacio restante
             
-            cLi.appendChild(cChk);
             cLi.appendChild(cLbl);
+            cLi.appendChild(cChk);
             chapterUl.appendChild(cLi);
         });
         li.appendChild(chapterUl);
@@ -588,18 +592,37 @@ function applyGameSorting() {
   }
 
   const mainLineFirst = document.getElementById('mainLineFirstCheck').checked;
+  const randomOrder = document.getElementById('randomOrderCheck') ? document.getElementById('randomOrderCheck').checked : false;
+
   function movesString(game) {
     return game.moves.map(m => m.san).join(' ');
   }
 
+  // Helper para barajar array (Fisher-Yates)
+  const shuffle = (array) => {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  };
+
   if (mainLineFirst) {
     // Keep main line first, sort the rest
     const mainLineGame = rawPgnGames[0];
-    const variantGames = rawPgnGames.slice(1).sort((a, b) => movesString(a).localeCompare(movesString(b)));
+    const variantGames = rawPgnGames.slice(1);
+    
+    if (randomOrder) shuffle(variantGames);
+    else variantGames.sort((a, b) => movesString(a).localeCompare(movesString(b)));
+    
     pgnData = [mainLineGame, ...variantGames];
   } else {
-    // Sort all games together alphabetically
-    pgnData = [...rawPgnGames].sort((a, b) => movesString(a).localeCompare(movesString(b)));
+    // Sort/Shuffle all games
+    let games = [...rawPgnGames];
+    if (randomOrder) shuffle(games);
+    else games.sort((a, b) => movesString(a).localeCompare(movesString(b)));
+    
+    pgnData = games;
   }
   
   buildGameList();
@@ -1197,7 +1220,42 @@ function setupEventListeners() {
   document.getElementById('saveVariantBtn').addEventListener('click', handleSaveVariant);
   document.getElementById('listModeBtn').addEventListener('click', toggleListMode);
 
+  // Helper para alinear checkboxes a la derecha en la configuración
+  const alignConfigCheckbox = (id) => {
+    const cb = document.getElementById(id);
+    if (!cb) return;
+    cb.style.transform = 'scale(1.3)';
+    const row = cb.closest('.config-row');
+    if (row) {
+      // Si está dentro de un label, lo sacamos para que flex space-between funcione
+      if (cb.parentElement.tagName === 'LABEL') {
+         cb.parentElement.classList.add('config-label');
+         row.appendChild(cb);
+      } else {
+         // Asegurar que sea el último elemento
+         row.appendChild(cb);
+      }
+    }
+  };
+
   const mainLineFirstCheck = document.getElementById('mainLineFirstCheck');
+  alignConfigCheckbox('mainLineFirstCheck');
+
+  // Inyectar opción de Orden Aleatorio si no existe
+  if (mainLineFirstCheck && !document.getElementById('randomOrderCheck')) {
+    const parentRow = mainLineFirstCheck.closest('.config-row');
+    if (parentRow && parentRow.parentNode) {
+      const div = document.createElement('div');
+      div.className = 'config-row';
+      div.innerHTML = `
+        <span class="config-label">Orden Aleatorio</span>
+        <input type="checkbox" id="randomOrderCheck" style="transform: scale(1.3);">
+      `;
+      parentRow.parentNode.insertBefore(div, parentRow.nextSibling);
+    }
+  }
+  const randomOrderCheck = document.getElementById('randomOrderCheck');
+
   const automoveMsInput = document.getElementById('automoveMs');
   const ignoreMovesInput = document.getElementById('ignoreMoves');
 
@@ -1212,6 +1270,18 @@ function setupEventListeners() {
     gotoMove();
   });
 
+  if (randomOrderCheck) {
+    const savedRandom = localStorage.getItem('pgn_randomOrder');
+    randomOrderCheck.checked = savedRandom === 'true';
+    randomOrderCheck.addEventListener('change', function() {
+      localStorage.setItem('pgn_randomOrder', this.checked);
+      applyGameSorting();
+      currentVar = 0;
+      currentMove = startMove();
+      gotoMove();
+    });
+  }
+
   const savedAutomoveMs = localStorage.getItem('pgn_automoveMs');
   if (savedAutomoveMs) automoveMsInput.value = savedAutomoveMs;
   automoveMsInput.addEventListener('change', () => localStorage.setItem('pgn_automoveMs', automoveMsInput.value));
@@ -1224,6 +1294,7 @@ function setupEventListeners() {
     if (this.checked) startAutomove();
     else stopAutomove();
   });
+  alignConfigCheckbox('automoveCheck');
 }
 
 function initVariosMenu() {
