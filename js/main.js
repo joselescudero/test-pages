@@ -1008,6 +1008,68 @@ const NAG_DESCRIPTIONS = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Drag and Drop (Análisis Libre)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function onDragStart(source, piece, position, orientation) {
+  if (chess.game_over()) return false;
+  // Solo permitir mover piezas del color que le toca
+  if ((chess.turn() === 'w' && piece.search(/^b/) !== -1) ||
+      (chess.turn() === 'b' && piece.search(/^w/) !== -1)) {
+    return false;
+  }
+}
+
+function onDrop(source, target) {
+  // Ver si el movimiento es legal
+  const move = chess.move({
+    from: source,
+    to: target,
+    promotion: 'q' // Simplificación: siempre dama
+  });
+
+  // Movimiento ilegal
+  if (move === null) return 'snapback';
+
+  // Inicializar pgnData si está vacío (modo análisis desde cero)
+  if (!pgnData || pgnData.length === 0) {
+     pgnData = [{ moves: [] }];
+     currentVar = 0;
+     currentMove = 0;
+     document.getElementById('gameList').innerHTML = '<div class="game-entry"><i>Análisis en curso...</i></div>';
+  }
+
+  const game = pgnData[currentVar];
+  
+  // Si estamos en medio de una partida, sobrescribimos el futuro (nueva variante principal)
+  if (currentMove < game.moves.length) {
+     game.moves = game.moves.slice(0, currentMove);
+  }
+  
+  // Agregamos el movimiento
+  game.moves.push({
+     san: move.san,
+     nags: [],
+     arrows: [],
+     circles: [],
+     comment: ''
+  });
+  
+  currentMove++;
+  
+  updateMovesBox();
+  updateSaveButtonState();
+  
+  // Actualizar UI y análisis
+  if (typeof updateCapturedPieces === 'function') updateCapturedPieces(chess);
+  startAnalysis();
+}
+
+function onSnapEnd() {
+  board.position(chess.fen());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Event Handlers & Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1348,6 +1410,24 @@ function initVariosMenu() {
 
   addItem('Partidas', () => { if (gamesTabBtn) gamesTabBtn.click(); });
 
+  addItem('Tablero de Análisis', () => {
+    if (confirm('¿Iniciar tablero de análisis? Se perderá la partida actual.')) {
+      stopAutomove();
+      pgnData = [{ moves: [] }];
+      currentVar = 0;
+      currentMove = 0;
+      chess.reset();
+      board.position('start');
+      clearOverlays();
+      updateMovesBox();
+      document.getElementById('gameList').innerHTML = '<div class="game-entry"><i>Tablero de Análisis</i></div>';
+      updateSaveButtonState();
+      if (typeof updateCapturedPieces === 'function') updateCapturedPieces(chess);
+      startAnalysis();
+      updateEvalBar({ type: 'cp', value: 0 });
+    }
+  });
+
   addItem('Lichess', () => {
     let url;
     if (pgnData && pgnData[currentVar]) {
@@ -1388,7 +1468,11 @@ window.onload = async function () {
   chess = new Chess();
   board = Chessboard('board', {
     position: 'start',
-    pieceTheme: 'https://raw.githubusercontent.com/oakmac/chessboardjs/master/website/img/chesspieces/wikipedia/{piece}.png'
+    pieceTheme: 'https://raw.githubusercontent.com/oakmac/chessboardjs/master/website/img/chesspieces/wikipedia/{piece}.png',
+    draggable: true,
+    onDragStart: onDragStart,
+    onDrop: onDrop,
+    onSnapEnd: onSnapEnd
   });
 
   initCommentBox();
