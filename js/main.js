@@ -638,7 +638,7 @@ function resetBoardToInitialState() {
     document.getElementById('gameList').innerHTML = '';
     document.getElementById('nagBox').style.display = 'none';
     clearOverlays();
-    if (chess) updateCapturedPieces(chess);
+    if (chess) updateCapturedPieces(chess, board.orientation());
     updateEvalBar({ type: 'cp', value: 0 });
     updateSaveButtonState();
 }
@@ -749,12 +749,11 @@ function drawOverlays(moveData) {
   });
 
   moveData.circles.forEach(c => {
-    const file = c.square.charCodeAt(0) - 97;
-    const rank = 8 - parseInt(c.square[1], 10);
+    const center = squareCenter(c.square, squareSize);
     const el = document.createElement('div');
     el.className = 'circle';
-    el.style.left        = (file * squareSize) + 'px';
-    el.style.top         = (rank * squareSize) + 'px';
+    el.style.left        = (center.x - squareSize / 2) + 'px';
+    el.style.top         = (center.y - squareSize / 2) + 'px';
     el.style.width       = squareSize + 'px';
     el.style.height      = squareSize + 'px';
     el.style.borderColor = c.color;
@@ -796,7 +795,7 @@ function gotoMove() {
   updateMovesBox();
   if (currentMove > 0) drawOverlays(game.moves[currentMove - 1]);
   else clearOverlays();
-  updateCapturedPieces(chess);
+  updateCapturedPieces(chess, board.orientation());
   // Update the save button icon based on the current variant
   updateSaveButtonState();
   startAnalysis();
@@ -1365,7 +1364,10 @@ function initVariosMenu() {
     const game = pgnData[currentVar];
     const moveData = (game && currentMove > 0) ? game.moves[currentMove - 1] : null;
     // Pequeño timeout para asegurar que el tablero ha actualizado su estado interno antes de dibujar
-    setTimeout(() => drawOverlays(moveData), 50);
+    setTimeout(() => {
+      drawOverlays(moveData);
+      updateCapturedPieces(chess, board.orientation());
+    }, 50);
   });
 
   addItem('Copiar FEN', () => {

@@ -1,6 +1,6 @@
 // captured-pieces.js
 
-function updateCapturedPieces(chess) {
+function updateCapturedPieces(chess, orientation = 'white') {
   const capturedWhiteContainer = document.getElementById('captured-white-pieces');
   const capturedBlackContainer = document.getElementById('captured-black-pieces');
   const materialDiffContainer = document.getElementById('material-difference');
@@ -52,10 +52,12 @@ function updateCapturedPieces(chess) {
   // Material difference is from white's perspective
   // (value of captured black pieces) - (value of captured white pieces)
   const difference = capturedBlackValue - capturedWhiteValue;
-  if (difference > 0) {
-    materialDiffContainer.textContent = `+${difference}`;
-  } else if (difference < 0) {
-    materialDiffContainer.textContent = `${difference}`;
+  const displayedDifference = (orientation === 'black') ? -difference : difference;
+
+  if (displayedDifference > 0) {
+    materialDiffContainer.textContent = `+${displayedDifference}`;
+  } else if (displayedDifference < 0) {
+    materialDiffContainer.textContent = `${displayedDifference}`;
   }
 }
 
