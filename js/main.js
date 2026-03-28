@@ -1140,6 +1140,29 @@ function startMove() {
   return getIgnoreMoves();
 }
 
+/**
+ * Calculates the starting move for a new game based on common prefix with the previous one.
+ */
+function getTargetMove(oldVar, newVar) {
+  const skipIdenticalCheck = document.getElementById('skipIdenticalCheck');
+  if (skipIdenticalCheck && skipIdenticalCheck.checked && 
+      oldVar !== null && oldVar !== undefined && oldVar !== newVar &&
+      pgnData && pgnData[oldVar] && pgnData[newVar]) {
+    const movesA = pgnData[oldVar].moves;
+    const movesB = pgnData[newVar].moves;
+    let common = 0;
+    const maxLen = Math.min(movesA.length, movesB.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (movesA[i].san === movesB[i].san) common++;
+      else break;
+    }
+    // If we have N common moves, setting currentMove to N-1 shows position after N-1 moves.
+    // Next move will show the N-th move (the last equal one).
+    return Math.max(0, common - 1);
+  }
+  return startMove();
+}
+
 function startAutomove() {
   stopAutomove();
   const ms = Math.max(100, parseInt(document.getElementById('automoveMs').value) || 2000);
@@ -1149,8 +1172,9 @@ function startAutomove() {
       currentMove++;
       gotoMove();
     } else if (currentVar < pgnData.length - 1) {
+      const oldVar = currentVar;
       currentVar++;
-      currentMove = startMove();
+      currentMove = getTargetMove(oldVar, currentVar);
       gotoMove();
     } else {
       stopAutomove();
@@ -1251,8 +1275,9 @@ function setupEventListeners() {
       currentMove++;
       gotoMove();
     } else if (currentVar < pgnData.length - 1) {
+      const oldVar = currentVar;
       currentVar++;
-      currentMove = startMove();
+      currentMove = getTargetMove(oldVar, currentVar);
       gotoMove();
     }
   };
@@ -1271,6 +1296,7 @@ function setupEventListeners() {
 
   document.getElementById('nextGameBtn').onclick = () => {
     stopAutomove();
+    const oldVar = currentVar;
     if (listModeActive) {
         if (savedVariants.length === 0) return;
         const currentIndexInSaved = savedVariants.indexOf(currentVar);
@@ -1281,13 +1307,13 @@ function setupEventListeners() {
             nextIndex = currentIndexInSaved + 1;
         }
         currentVar = savedVariants[nextIndex];
-        currentMove = startMove();
+        currentMove = getTargetMove(oldVar, currentVar);
         gotoMove();
     } else {
         // Original logic
         if (currentVar < pgnData.length - 1) {
             currentVar++;
-            currentMove = startMove();
+            currentMove = getTargetMove(oldVar, currentVar);
             gotoMove();
         }
     }
@@ -1296,6 +1322,7 @@ function setupEventListeners() {
   document.getElementById('prevGameBtn').onclick = () => {
     stopAutomove();
     const ignore = startMove();
+    const oldVar = currentVar;
     if (listModeActive) {
         if (savedVariants.length === 0) return;
         const currentIndexInSaved = savedVariants.indexOf(currentVar);
@@ -1306,7 +1333,7 @@ function setupEventListeners() {
             prevIndex = currentIndexInSaved - 1;
         }
         currentVar = savedVariants[prevIndex];
-        currentMove = startMove();
+        currentMove = getTargetMove(oldVar, currentVar);
         gotoMove();
     } else {
         // Original logic
@@ -1314,7 +1341,7 @@ function setupEventListeners() {
             currentMove = ignore;
         } else if (currentVar > 0) {
             currentVar--;
-            currentMove = startMove();
+            currentMove = getTargetMove(oldVar, currentVar);
         }
     }
     gotoMove();
@@ -1324,8 +1351,9 @@ function setupEventListeners() {
     const t = e.target.closest('.game-label');
     if (!t) return;
     stopAutomove();
+    const oldVar = currentVar;
     currentVar  = parseInt(t.dataset.idx, 10);
-    currentMove = startMove();
+    currentMove = getTargetMove(oldVar, currentVar);
     gotoMove();
     switchTab('tablero');
     window.scrollTo(0, 0);
@@ -1380,6 +1408,22 @@ function setupEventListeners() {
   const automoveMsInput = document.getElementById('automoveMs');
   const ignoreMovesInput = document.getElementById('ignoreMoves');
 
+  // Inyectar "Ignorar jugadas iguales" antes de "Ignorar primeras N jugadas"
+  if (ignoreMovesInput) {
+    const parentRow = ignoreMovesInput.closest('.config-row');
+    if (parentRow && parentRow.parentNode) {
+      const div = document.createElement('div');
+      div.className = 'config-row';
+      div.innerHTML = `
+        <span class="config-label">Ignorar jugadas iguales</span>
+        <input type="checkbox" id="skipIdenticalCheck">
+      `;
+      parentRow.parentNode.insertBefore(div, parentRow);
+    }
+  }
+  const skipIdenticalCheck = document.getElementById('skipIdenticalCheck');
+  alignConfigCheckbox('skipIdenticalCheck');
+
   const savedMainLineFirst = localStorage.getItem('pgn_mainLineFirst');
   mainLineFirstCheck.checked = savedMainLineFirst === null || savedMainLineFirst === 'true'; // Default to true
   mainLineFirstCheck.addEventListener('change', function() {
@@ -1400,6 +1444,19 @@ function setupEventListeners() {
       currentVar = 0;
       currentMove = startMove();
       gotoMove();
+    });
+  }
+
+  if (skipIdenticalCheck) {
+    const savedSkip = localStorage.getItem('pgn_skipIdentical');
+    skipIdenticalCheck.checked = savedSkip === 'true';
+    ignoreMovesInput.disabled = skipIdenticalCheck.checked;
+    ignoreMovesInput.style.opacity = skipIdenticalCheck.checked ? '0.5' : '1';
+
+    skipIdenticalCheck.addEventListener('change', function() {
+      localStorage.setItem('pgn_skipIdentical', this.checked);
+      ignoreMovesInput.disabled = this.checked;
+      ignoreMovesInput.style.opacity = this.checked ? '0.5' : '1';
     });
   }
 
