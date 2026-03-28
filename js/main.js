@@ -21,6 +21,8 @@ let savedVariants = [];
 let listModeActive = false;
 let lastDisplayedPvDepth = 0;
 let isLoading = false;
+let isFreeBoardActive = false;
+let fenToGamesMap = new Map();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PGN Loading and Processing
@@ -626,6 +628,40 @@ function applyGameSorting() {
   }
   
   buildGameList();
+  buildFenMap();
+}
+
+/**
+ * Utility to get a canonical FEN for matching (ignores move clocks)
+ */
+function getMatchFen(f) {
+  return f.split(' ').slice(0, 4).join(' ');
+}
+
+/**
+ * Builds a map of FEN positions to game/move indices for quick matching.
+ */
+function buildFenMap() {
+  fenToGamesMap.clear();
+  if (!pgnData) return;
+
+  pgnData.forEach((game, gIdx) => {
+    const temp = new Chess();
+    // Start position
+    const startFen = getMatchFen(temp.fen());
+    if (!fenToGamesMap.has(startFen)) fenToGamesMap.set(startFen, []);
+    fenToGamesMap.get(startFen).push({ gameIdx: gIdx, moveIdx: 0 });
+
+    for (let i = 0; i < game.moves.length; i++) {
+      if (temp.move(game.moves[i].san)) {
+        const fen = getMatchFen(temp.fen());
+        if (!fenToGamesMap.has(fen)) fenToGamesMap.set(fen, []);
+        fenToGamesMap.get(fen).push({ gameIdx: gIdx, moveIdx: i + 1 });
+      } else {
+        break; // Stop if move is illegal
+      }
+    }
+  });
 }
 
 /**
@@ -681,6 +717,75 @@ function initArrowMarkers() {
     defs.appendChild(marker);
   });
 }
+
+function onDragStart(source, piece, position, orientation) {
+  if (!isFreeBoardActive) return false;
+  if (chess.game_over()) return false;
+  // Solo permitir mover las piezas del bando al que le toca
+  if ((chess.turn() === 'w' && piece.search(/^b/) !== -1) ||
+      (chess.turn() === 'b' && piece.search(/^w/) !== -1)) {
+    return false;
+  }
+}
+
+function onDrop(source, target) {
+  const move = chess.move({
+    from: source,
+    to: target,
+    promotion: 'q' // Promoción automática a dama por simplicidad
+  });
+
+  if (move === null) return 'snapback';
+
+  updateFreeBoardUI();
+  updateCapturedPieces(chess, board.orientation());
+  startAnalysis();
+}
+
+function onSnapEnd() {
+  board.position(chess.fen());
+}
+
+/**
+ * Updates the UI when in free board mode to show matching positions.
+ */
+function updateFreeBoardUI() {
+  const movesBox = document.getElementById('movesBox');
+  if (!isFreeBoardActive) return;
+
+  const currentFen = getMatchFen(chess.fen());
+  const matches = fenToGamesMap.get(currentFen) || [];
+
+  let html = `<div style="background:#fff3e0; padding:10px; border-radius:4px; margin-bottom:12px; color:#5d4037; border:1px solid #ffe0b2;">
+    <b>🛠️ Modo Tablero Libre</b><br>
+    <small>Explora movimientos manualmente.</small>
+  </div>`;
+
+  if (matches.length > 0) {
+    html += `<b>📍 Posición encontrada en:</b><ul style="padding-left:18px; margin-top:8px; font-size:14px;">`;
+    matches.forEach(m => {
+      const isMain = document.getElementById('mainLineFirstCheck').checked && m.gameIdx === 0;
+      const label = isMain ? 'Línea principal' : `Variante ${m.gameIdx + 1}`;
+      html += `<li style="margin-bottom:6px;">
+        <a href="#" onclick="loadMatchedGame(${m.gameIdx}, ${m.moveIdx}); return false;" style="color:#1976d2; text-decoration:none; font-weight:bold;">
+          ${label} (jugada ${m.moveIdx})
+        </a>
+      </li>`;
+    });
+    html += '</ul>';
+  } else {
+    html += '<p style="font-size:14px; color:#757575;"><i>Esta posición no existe en el PGN cargado.</i></p>';
+  }
+  html += '<div id="pvBox" style="margin-top:15px; padding-top:10px; border-top:1px dashed #ccc; font-weight:bold; color:#c62828;"></div>';
+  movesBox.innerHTML = html;
+}
+
+window.loadMatchedGame = (gIdx, mIdx) => {
+  isFreeBoardActive = false;
+  currentVar = gIdx;
+  currentMove = mIdx;
+  gotoMove();
+};
 
 function initCommentBox() {
   const movesBox = document.getElementById('movesBox');
@@ -784,6 +889,7 @@ function gotoMove() {
   }
   board.position(chess.fen());
 
+  isFreeBoardActive = false;
   if (fromSq && toSq) {
     const fromEl = document.querySelector('.square-' + fromSq);
     const toEl = document.querySelector('.square-' + toSq);
@@ -934,8 +1040,9 @@ function updateEvalBar(score) {
 }
 
 function updatePvDisplay(pvString, depth) {
-  if (currentMove !== pgnData[currentVar]?.moves.length) {
-    lastDisplayedPvDepth = 0; // Reset for next time
+  const isAtEnd = pgnData[currentVar] && currentMove === pgnData[currentVar].moves.length;
+  if (!isFreeBoardActive && !isAtEnd) {
+    lastDisplayedPvDepth = 0;
     return;
   }
   // Don't update display with a result from a shallower search, which can happen
@@ -948,16 +1055,31 @@ function updatePvDisplay(pvString, depth) {
   const pvBox = document.getElementById('pvBox');
   if (!pvBox) return;
 
-  const uciMoves = pvString.split(' ').slice(0, 8);
+  const uciMoves = pvString.split(' ').slice(0, 12);
   const tempChess = new Chess(chess.fen());
-  const sanMoves = [];
+  
+  const fenParts = tempChess.fen().split(' ');
+  let moveNum = parseInt(fenParts[5]);
+  let isWhiteTurn = fenParts[1] === 'w';
+  let displayStr = "Mejor: ";
 
-  for (const uci of uciMoves) {
+  for (let i = 0; i < uciMoves.length; i++) {
+    const uci = uciMoves[i];
     const move = tempChess.move({ from: uci.substring(0, 2), to: uci.substring(2, 4), promotion: uci.length > 4 ? uci.substring(4, 5) : undefined });
-    if (move) sanMoves.push(sanToSpanish(move.san));
-    else break;
+    if (!move) break;
+
+    const san = sanToSpanish(move.san);
+    if (isWhiteTurn) {
+      displayStr += `${moveNum}. ${san} `;
+      isWhiteTurn = false;
+    } else {
+      if (i === 0) displayStr += `${moveNum} ...${san} `;
+      else displayStr += `${san} `;
+      moveNum++;
+      isWhiteTurn = true;
+    }
   }
-  pvBox.textContent = 'Mejor: ' + sanMoves.join(' ');
+  pvBox.textContent = displayStr.trim();
 }
 
 function startAnalysis() {
@@ -1358,6 +1480,12 @@ function initVariosMenu() {
     window.open(url, '_blank');
   });
 
+  addItem('Continúa aquí', () => {
+    isFreeBoardActive = true;
+    updateFreeBoardUI();
+    startAnalysis();
+  });
+
   addItem('Girar Tablero', () => {
     board.flip();
     // Redibujar flechas/círculos en la nueva orientación
@@ -1389,7 +1517,11 @@ function initVariosMenu() {
 window.onload = async function () {
   chess = new Chess();
   board = Chessboard('board', {
+    draggable: true,
     position: 'start',
+    onDragStart: onDragStart,
+    onDrop: onDrop,
+    onSnapEnd: onSnapEnd,
     pieceTheme: 'https://raw.githubusercontent.com/oakmac/chessboardjs/master/website/img/chesspieces/wikipedia/{piece}.png'
   });
 
