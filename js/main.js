@@ -503,8 +503,9 @@ async function loadPgnFromUrl(url) {
 /**
  * Carga múltiples PGNs basados en la lista de selección.
  * @param {Array<{value: string, type: string, name: string, chapters?: number[]}>} selectionList
+ * @param {boolean} restorePosition
  */
-async function loadMultiplePgns(selectionList) {
+async function loadMultiplePgns(selectionList, restorePosition = false) {
   if (isLoading) return;
   isLoading = true;
 
@@ -556,8 +557,15 @@ async function loadMultiplePgns(selectionList) {
     applyGameSorting();
 
     if (pgnData.length > 0) {
-      currentVar = 0;
-      currentMove = startMove();
+      if (restorePosition) {
+        const savedVar = parseInt(localStorage.getItem('pgn_var'), 10);
+        const savedMove = parseInt(localStorage.getItem('pgn_move'), 10);
+        currentVar = (savedVar >= 0 && savedVar < pgnData.length) ? savedVar : 0;
+        currentMove = (savedMove >= 0) ? savedMove : startMove();
+      } else {
+        currentVar = 0;
+        currentMove = startMove();
+      }
       gotoMove();
       switchTab('tablero');
     } else {
@@ -1608,15 +1616,7 @@ window.onload = async function () {
   if (savedListStr) {
     const list = JSON.parse(savedListStr);
     if (list && list.length > 0) {
-      await loadMultiplePgns(list);
-      // Restaurar posición si es posible
-      const savedVar = parseInt(localStorage.getItem('pgn_var'), 10);
-      const savedMove = parseInt(localStorage.getItem('pgn_move'), 10);
-      if (pgnData.length > 0) {
-        currentVar = (savedVar >= 0 && savedVar < pgnData.length) ? savedVar : 0;
-        currentMove = (savedMove >= 0) ? savedMove : startMove();
-        gotoMove();
-      }
+      await loadMultiplePgns(list, true);
     }
   } else {
     // Migración: Comprobar selección antigua simple
@@ -1632,7 +1632,7 @@ window.onload = async function () {
          if (found) name = found[0];
       }
       // Cargar como lista de un elemento
-      await loadMultiplePgns([{ value: savedPgn, type, name }]);
+      await loadMultiplePgns([{ value: savedPgn, type, name }], true);
     } else {
       resetBoardToInitialState();
     }
