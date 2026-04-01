@@ -2,8 +2,8 @@
 // Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 const PGN_SOURCES = {
-  'Apertura del Alfil': 'apertura_alfil',
-  'Variantes Ruy Lopez': '2-variantes'
+//  'Apertura del Alfil': 'apertura_alfil',
+//  'Variantes Ruy Lopez': '2-variantes'
 };
 const PGN_BASE_URL = 'https://joselescudero.github.io/test-pages/pgn/';
 
@@ -776,10 +776,25 @@ function updateFreeBoardUI() {
     matches.forEach(m => {
       const isMain = document.getElementById('mainLineFirstCheck').checked && m.gameIdx === 0;
       const label = isMain ? 'Línea principal' : `Variante ${m.gameIdx + 1}`;
-      html += `<li style="margin-bottom:6px;">
-        <a href="#" onclick="loadMatchedGame(${m.gameIdx}, ${m.moveIdx}); return false;" style="color:#1976d2; text-decoration:none; font-weight:bold;">
+      
+      const game = pgnData[m.gameIdx];
+      let movesHtml = '';
+      let n = 1;
+      game.moves.forEach((move, i) => {
+        if (i % 2 === 0) movesHtml += `${n++}. `;
+        const san = sanToSpanish(move.san);
+        if (i === m.moveIdx - 1) {
+          movesHtml += `<b style="color:#900;">${san}</b> `;
+        } else {
+          movesHtml += `${san} `;
+        }
+      });
+
+      html += `<li style="margin-bottom:12px;">
+        <a href="#" onclick="loadMatchedGame(${m.gameIdx}, ${m.moveIdx}); return false;" style="color:#1976d2; text-decoration:none; font-weight:bold; display:block; margin-bottom:4px;">
           ${label} (jugada ${m.moveIdx})
         </a>
+        <div style="font-size:12px; color:#555; line-height:1.4; word-break:break-word;">${movesHtml.trim()}</div>
       </li>`;
     });
     html += '</ul>';
@@ -1417,6 +1432,22 @@ function setupEventListeners() {
   }
   const randomOrderCheck = document.getElementById('randomOrderCheck');
 
+  // Inyectar "Pantalla Completa"
+  if (randomOrderCheck) {
+    const parentRow = randomOrderCheck.closest('.config-row');
+    if (parentRow && parentRow.parentNode) {
+      const div = document.createElement('div');
+      div.className = 'config-row';
+      div.innerHTML = `
+        <span class="config-label">Pantalla Completa (Tablero)</span>
+        <input type="checkbox" id="fullScreenCheck">
+      `;
+      parentRow.parentNode.insertBefore(div, parentRow.nextSibling);
+    }
+  }
+  const fullScreenCheck = document.getElementById('fullScreenCheck');
+  alignConfigCheckbox('fullScreenCheck');
+
   const automoveMsInput = document.getElementById('automoveMs');
   const ignoreMovesInput = document.getElementById('ignoreMoves');
 
@@ -1456,6 +1487,15 @@ function setupEventListeners() {
       currentVar = 0;
       currentMove = startMove();
       gotoMove();
+    });
+  }
+
+  if (fullScreenCheck) {
+    fullScreenCheck.checked = localStorage.getItem('pgn_fullScreen') === 'true';
+    fullScreenCheck.addEventListener('change', function() {
+      localStorage.setItem('pgn_fullScreen', this.checked);
+      document.body.classList.toggle('full-screen-mode', this.checked);
+      if (board) board.resize();
     });
   }
 
@@ -1584,6 +1624,11 @@ function initVariosMenu() {
 // Init
 // ─────────────────────────────────────────────────────────────────────────────
 window.onload = async function () {
+  // Aplicar estado de Pantalla Completa guardado antes de crear el tablero
+  if (localStorage.getItem('pgn_fullScreen') === 'true') {
+    document.body.classList.add('full-screen-mode');
+  }
+
   chess = new Chess();
   board = Chessboard('board', {
     draggable: true,
@@ -1604,7 +1649,7 @@ window.onload = async function () {
   setupEventListeners();
   initVariosMenu();
   registerServiceWorker();
-  
+
   // Load saved variants for the initially selected PGN
   const initialKey = getSavedVariantsKey();
   savedVariants = initialKey ? JSON.parse(localStorage.getItem(initialKey)) || [] : [];

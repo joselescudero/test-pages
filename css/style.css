@@ -23,6 +23,13 @@ body {
   width: 95%;
 }
 
+/* Full Screen Mode for Mobile */
+body.full-screen-mode #mainContent {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 0;
+}
+
 /* Board fills the full screen width with small margins */
 #boardContainer {
   position: relative;
