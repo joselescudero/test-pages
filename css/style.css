@@ -15,12 +15,12 @@ body {
 
 #mainContent {
   display: flex;
-  gap: 5px;
-  /* Center the block and set a max width */
+  flex-direction: column; /* Cambiado a columna para que la barra vaya abajo */
+  gap: 8px;
   margin: 5px auto 0 auto;
-  max-width: 625px; /* 600px board + 20px bar + 5px gap */
-  /* Ensure it doesn't overflow on small screens */
-  width: 100%;
+  /* Limita el ancho para que no crezca más allá de lo que cabe en pantalla (80% de la altura) */
+  max-width: min(500px, 80vh);
+  width: 95%;
 }
 
 /* Board fills the full screen width with small margins */
@@ -202,11 +202,11 @@ body {
 }
 
 #evalBar {
-  width: 20px;
-  /* height is stretched by flexbox */
+  width: 100%;
+  height: 12px; /* Altura de la barra horizontal */
   background-color: #333;
   display: flex;
-  flex-direction: column-reverse; /* Black at bottom, white at top */
+  flex-direction: row; 
   border-radius: 3px;
   overflow: hidden;
   border: 1px solid #555;
@@ -214,15 +214,14 @@ body {
 }
 
 #evalBar-white {
-  width: 100%;
+  height: 100%;
   background-color: #f0f0f0;
-  transition: height 0.3s ease;
+  transition: width 0.3s ease; /* Transición en ancho */
 }
 
 #evalBar-black {
-  width: 100%;
+  height: 100%;
   background-color: #404040;
-  transition: height 0.3s ease;
 }
 
 #pvBox {

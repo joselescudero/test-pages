@@ -737,13 +737,15 @@ function onDrop(source, target) {
 
   if (move === null) return 'snapback';
 
-  updateFreeBoardUI();
-  updateCapturedPieces(chess, board.orientation());
-  startAnalysis();
 }
 
 function onSnapEnd() {
   board.position(chess.fen());
+  if (isFreeBoardActive) {
+    updateFreeBoardUI();
+    updateCapturedPieces(chess, board.orientation());
+    startAnalysis();
+  }
 }
 
 /**
@@ -1028,6 +1030,7 @@ function onEngineMessage(event) {
 
 function updateEvalBar(score) {
   const whiteBar = document.getElementById('evalBar-white');
+  if (!whiteBar) return;
   let whitePct = 50;
 
   if (score.type === 'mate') {
@@ -1036,7 +1039,8 @@ function updateEvalBar(score) {
     const advantage = 2 / (1 + Math.exp(-0.0035 * score.value)) - 1;
     whitePct = (1 + advantage) / 2 * 100;
   }
-  whiteBar.style.height = `${whitePct}%`;
+  whiteBar.style.width = `${whitePct}%`;
+  whiteBar.style.height = '100%';
 }
 
 function updatePvDisplay(pvString, depth) {
@@ -1581,6 +1585,10 @@ window.onload = async function () {
     onSnapEnd: onSnapEnd,
     pieceTheme: 'https://raw.githubusercontent.com/oakmac/chessboardjs/master/website/img/chesspieces/wikipedia/{piece}.png'
   });
+
+  // Evitar scroll al arrastrar piezas en móviles
+  const boardEl = document.getElementById('board');
+  if (boardEl) boardEl.style.touchAction = 'none';
 
   initCommentBox();
   initArrowMarkers();
