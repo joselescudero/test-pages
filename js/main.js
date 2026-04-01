@@ -1403,10 +1403,11 @@ function setupEventListeners() {
     cb.style.transform = 'scale(1.3)';
     const row = cb.closest('.config-row');
     if (row) {
-      // Si está dentro de un label, lo sacamos para que flex space-between funcione
       if (cb.parentElement.tagName === 'LABEL') {
-         cb.parentElement.classList.add('config-label');
-         row.appendChild(cb);
+         const lbl = cb.parentElement;
+         lbl.classList.add('config-label');
+         lbl.setAttribute('for', cb.id); // Asegurar vínculo por ID
+         row.appendChild(cb); // Mover a la derecha para el flex
       } else {
          // Asegurar que sea el último elemento
          row.appendChild(cb);
@@ -1495,7 +1496,6 @@ function setupEventListeners() {
     fullScreenCheck.addEventListener('change', function() {
       localStorage.setItem('pgn_fullScreen', this.checked);
       document.body.classList.toggle('full-screen-mode', this.checked);
-      if (board) board.resize();
     });
   }
 
@@ -1649,6 +1649,15 @@ window.onload = async function () {
   setupEventListeners();
   initVariosMenu();
   registerServiceWorker();
+
+  // Observador para redimensionar el tablero automáticamente cuando cambie el contenedor
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => {
+      if (board) board.resize();
+    });
+    const container = document.getElementById('boardContainer');
+    if (container) ro.observe(container);
+  }
 
   // Load saved variants for the initially selected PGN
   const initialKey = getSavedVariantsKey();
