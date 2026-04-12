@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PGN Viewer</title>
+<meta name="description" content="PGN chess game viewer">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1a1a2e" id="themeColorMeta">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" sizes="192x192" href="img/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="PGN Viewer">
+<link rel="apple-touch-icon" href="img/icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="appShell">
+
+  <!-- ── TOP BAR ── -->
+  <header id="topBar">
+    <span id="topBarTitle">♟ PGN Viewer</span>
+    <div id="topBarActions">
+      <button id="darkModeBtn"    class="icon-btn" title="Modo oscuro">🌙</button>
+      <button id="orientationBtn" class="icon-btn" title="Girar tablero">⇅</button>
+      <button id="freeBoardBtn"   class="icon-btn" title="Modo Análisis">🛠</button>
+      <button id="menuBtn"        class="icon-btn" title="Más opciones">⋯</button>
+    </div>
+    <!-- Dropdown menu -->
+    <div id="topMenu" class="dropdown-menu" style="display:none">
+      <div class="menu-item" id="menuLichess">Abrir en Lichess</div>
+      <div class="menu-item" id="menuCopyFen">Copiar FEN</div>
+      <div class="menu-item" id="menuCopyPgn">Copiar PGN</div>
+      <div class="menu-item" id="menuStudyMode">🎓 Modo Estudio</div>
+      <div class="menu-separator"></div>
+      <div class="menu-item" id="menuGameList">Lista de Partidas</div>
+    </div>
+  </header>
+
+  <!-- ── TABS ── -->
+  <nav id="tabBar">
+    <button class="tab-btn" data-tab="pgn"    title="Seleccionar PGN">📜</button>
+    <button class="tab-btn active" data-tab="board"  title="Tablero">♟</button>
+    <button class="tab-btn" data-tab="games"  title="Lista de Partidas">☰</button>
+    <button class="tab-btn" data-tab="config" title="Configuración">⚙</button>
+    <button class="tab-btn" id="listModeBtn"  title="Modo Lista Guardada">⭐</button>
+    <button class="tab-btn" id="saveVariantBtn" title="Guardar Variante">💾</button>
+  </nav>
+
+  <!-- ══ TAB: PGN ══ -->
+  <div id="tab-pgn" class="tab-pane" style="display:none">
+    <div id="pgnList"></div>
+  </div>
+
+  <!-- ══ TAB: BOARD ══ -->
+  <div id="tab-board" class="tab-pane">
+
+    <!-- Eval bar — just the bar, no score here -->
+    <div id="evalBarWrap">
+      <div id="evalBar">
+        <div id="evalBar-white"></div>
+        <div id="evalBar-black"></div>
+      </div>
+    </div>
+
+    <!-- Board -->
+    <div id="mainContent">
+      <div id="boardContainer">
+        <div id="board"></div>
+        <svg id="arrowOverlay"><defs></defs></svg>
+        <!-- Study mode overlay -->
+        <div id="studyOverlay" style="display:none">
+          <div id="studyMsg">¿Cuál es la siguiente jugada?</div>
+          <div id="studyFeedback"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Captured pieces: white left | eval score center | black right (single row) -->
+    <div id="capturedPiecesBar"></div>
+
+    <!-- Controls -->
+    <div id="controls">
+      <button id="prevGameBtn" title="Partida anterior [↑/W]">⏮</button>
+      <button id="prevBtn"     title="Jugada anterior [←/A]">◀</button>
+      <button id="nextBtn"     title="Siguiente jugada [→/D]">▶</button>
+      <button id="nextGameBtn" title="Siguiente partida [↓/S]">⏭</button>
+    </div>
+
+    <!-- Progress bar -->
+    <div id="progressWrap">
+      <div id="progressBar"></div>
+    </div>
+
+    <!-- Moves + Comment + NAG + PV -->
+    <div id="commentBox" style="display:none"></div>
+    <div id="nagBox"     style="display:none"></div>
+    <div id="movesBox"></div>
+    <div id="pvBox"></div>
+
+  </div>
+
+  <!-- ══ TAB: GAMES ══ -->
+  <div id="tab-games" class="tab-pane" style="display:none">
+    <div id="searchWrap">
+      <input id="searchInput" type="search" placeholder="Buscar secuencia: e4 e5 Cf3…" autocomplete="off">
+    </div>
+    <div id="gameList"></div>
+  </div>
+
+  <!-- ══ TAB: CONFIG ══ -->
+  <div id="tab-config" class="tab-pane" style="display:none">
+
+    <div class="config-section-title">Visualización</div>
+    <label class="config-row">
+      <span class="config-label">Principal Primero</span>
+      <input type="checkbox" id="mainLineFirstCheck" class="toggle">
+    </label>
+    <label class="config-row">
+      <span class="config-label">Orden Aleatorio</span>
+      <input type="checkbox" id="randomOrderCheck" class="toggle">
+    </label>
+    <label class="config-row">
+      <span class="config-label">Ignorar jugadas iguales</span>
+      <input type="checkbox" id="skipIdenticalCheck" class="toggle">
+    </label>
+    <label class="config-row">
+      <span class="config-label">Ignorar primeras N jugadas</span>
+      <input type="number" id="ignoreMoves" value="0" min="0" class="config-input">
+    </label>
+    <label class="config-row">
+      <span class="config-label">Pantalla Completa</span>
+      <input type="checkbox" id="fullScreenCheck" class="toggle">
+    </label>
+
+    <div class="config-section-title">Automove</div>
+    <label class="config-row">
+      <span class="config-label">Automove</span>
+      <input type="checkbox" id="automoveCheck" class="toggle">
+    </label>
+    <label class="config-row">
+      <span class="config-label">Ms entre jugadas</span>
+      <input type="number" id="automoveMs" value="2000" min="100" class="config-input">
+    </label>
+
+    <div class="config-section-title">Motor (Stockfish)</div>
+    <label class="config-row">
+      <span class="config-label">Análisis activado</span>
+      <input type="checkbox" id="engineCheck" class="toggle" checked>
+    </label>
+    <label class="config-row">
+      <span class="config-label">Líneas PV (1–3)</span>
+      <input type="number" id="pvLines" value="1" min="1" max="3" class="config-input">
+    </label>
+
+    <div class="config-section-title">Notación</div>
+    <label class="config-row">
+      <span class="config-label">Notación en español</span>
+      <input type="checkbox" id="spanishNotationCheck" class="toggle" checked>
+    </label>
+
+  </div>
+
+</div>
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+<script src="js/pgn-parser.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
